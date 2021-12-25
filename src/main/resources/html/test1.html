@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <!--    "-- ><a/>[ss]"fhe-->
+    <meta charset="UTF-8">
+    <title>Title</title>
+</head>
+<script>
+    let a = "fe\\\"";
+
+    var count = 0;
+    //采用递归调用的方法，比较方便和简单。
+    function fds(node) {
+
+        if (node.nodeType === 1) {
+            //这里我们用nodeName属性，直接获取节点的节点名称
+            var tagName = node.nodeName;
+            //判断对象中存在不存在同类的节点，若存在则添加，不存在则添加并赋值为1
+            count++;
+        }
+        //获取该元素节点的所有子节点
+        var children = node.childNodes;
+        for (var i = 0; i < children.length; i++) {
+            //递归调用
+            fds(children[i])
+        }
+    }
+    fds(document);
+    console.log(count)
+</script>
+<body>
+
+<div id =/"fe\\\""<a// abc=1 ' cd ='1 a' = = 'afe' > &nbsp;1 < 3  </div>
+
+
+<!--
+<table width="100%" border="1">
+    <colgroup>
+    <col align="left" />
+    <col align="left" />
+    <col align="right" />
+    <tr>
+        <th>ISBN</th>
+        <th>Title</th>
+        <th>Price</th>
+    </tr>
+    <tr>
+        <td>3476896</td>
+        <td>My first HTML</td>
+        <td>$53</td>
+    </tr>
+</table>
+
+-->
+
+
+<!--
+<span>
+    <div id="13">
+        <div id="123"></div>
+
+</span>
+-->
+
+
+
+</body>
+</html>
