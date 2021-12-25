@@ -307,8 +307,7 @@ public class HtmlNodeParse {
             nameBytes = new byte[index - start + 1];
             UTF8ByteToLowerCase(htmlBytes, start, nameBytes, 0, nameBytes.length);
         }
-        //System.arraycopy(htmlBytes, start, nameBytes, 0, nameBytes.length);
-        // todo 这里应该转小写
+
         node.name = nameBytes;
 
         //读取等号 判断等号左侧是否的id  或者class ，否则的话先不解析直接跳过
