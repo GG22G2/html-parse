@@ -1,9 +1,5 @@
 package hsb.html.dom;
 
-
-import hsb.html.StringIndex;
-
-
 public class Node {
 
     Node[] children = new Node[4];
@@ -32,8 +28,6 @@ public class Node {
     //class可能包含很多个子块，分割后保存
     public byte[][] classList;
 
-    //文本节点的数据
-    public StringIndex text;
 
     //是否自闭合 只有在解析标签是遇到/> 这个值才可能是true ，之所以不是一定,是因为如<div id = fee/>，这个"fee/"都被当作id的值,chrome也是这么处理的
     //但实际上是否被当作自闭合，好像有严格限制，比如div就不允许自闭合，<div/>也会被认为是开始标签

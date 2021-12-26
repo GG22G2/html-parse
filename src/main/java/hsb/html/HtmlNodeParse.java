@@ -1,27 +1,22 @@
 package hsb.html;
 
-
 import hsb.html.dom.Node;
-
 import java.nio.charset.StandardCharsets;
 
-
 public class HtmlNodeParse {
+
     //可以是单标签，也可以是双标签的元素,这个主要放这里便与查阅
     static final String[] NoMustSingleTag = new String[]{"colgroup"};
-    //可以是单标签，也可以是双标签的元素,这个主要放这里便与查阅
-    static final String[] textTag = new String[]{"title", "script", "textarea"};
-    static final long[] textTagHash = new long[textTag.length];
-
-
-    //单标签元素 , 也就是闭合标签一定被省略
-    //todo 注意br标签是个特列，</br> 会被当作一个标签处理
-    static final String[] emptyTagNameStr = new String[]{"br", "img", "wbr", "col", "area", "meta", "link", "base", "embed", "input", "keygen", "colgroup"};
-
-    static final int[][] tagNameLengthIndex = new int[15][2];
-
     //已经过时的元素，这些元素直接丢弃就行
     static final String[] removeTag = new String[]{"frame"};
+
+    //当作文本处理的标签，style不应该放在这里的，
+    static final String[] textTag = new String[]{"style", "title", "script", "textarea"};
+    static final long[] textTagHash = new long[textTag.length];
+
+    //单标签元素 , 也就是闭合标签一定被省略。 注意br标签是个特列，</br> 会被当作一个标签处理
+    static final String[] emptyTagNameStr = new String[]{"br", "img", "wbr", "col", "area", "meta", "link", "base", "embed", "input", "keygen", "colgroup"};
+    static final int[][] tagNameLengthIndex = new int[15][2];
 
     static final byte[][] emptyTagName = new byte[emptyTagNameStr.length][];
     static final long[] emptyTagNameHash = new long[emptyTagNameStr.length];
@@ -40,11 +35,9 @@ public class HtmlNodeParse {
             tagNameLengthIndex[nameBytes.length + 1][0] = i + 1;
         }
 
-
         for (int i = 0; i < textTag.length; i++) {
             textTagHash[i] = tagNameByteToLong(textTag[i].getBytes(StandardCharsets.UTF_8));
         }
-
 
         for (int i = 0; i < 256; i++) {
             alphaConvertTable[i] = (byte) i;
@@ -53,7 +46,6 @@ public class HtmlNodeParse {
         for (int i = 65, j = 97; i <= 90; i++, j++) {
             alphaConvertTable[i] = (byte) j;
         }
-
 
         for (int i = 0; i < 256; i++) {
             if ((i >= 'A' && i <= 'Z') || (i >= 'a' && i <= 'z')) {
@@ -136,7 +128,6 @@ public class HtmlNodeParse {
                         }
                         tagNameEndIndex--;
                     } else {
-
                         tagEndIndex = constructIndex[constructPosition++];
                         start = tagEndIndex + 1;
                     }
@@ -155,6 +146,7 @@ public class HtmlNodeParse {
                     constructPositions[0] = constructPosition;
                     //跳转到标签开始
                     Node node = readTag(htmlBytes, index, constructIndex, constructPositions);
+                    boolean isTextTag = isTextTag(node.nameHash);
                     constructPosition = constructPositions[0];
                     findTextEnd = true;
                     //更新start位置
@@ -163,7 +155,8 @@ public class HtmlNodeParse {
 
 
                     //script和textarea标签都有个特点，就是如果遇到</script>  </script >  </textarea> </textarea >，就一定代表闭合了.
-                    if (isTextTag(node.nameHash)) {
+                    //这几种文本标签都是不允许自闭和的，需要忽略
+                    if (isTextTag) {
                         constructPosition = consumeText(htmlBytes, constructIndex, constructPosition, node);
                         Node parent = stack[--stackTop];
                         parent.appendChild(node);
@@ -175,10 +168,10 @@ public class HtmlNodeParse {
                     //判断开始标签和 start之间是否有字符
                     if (index > textStart) { //当作文本标签处理
                         //  String text = new String(htmlBytes, start, index - start);
-                        StringIndex stringIndex = new StringIndex(start, index - textStart);
+/*                        StringIndex stringIndex = new StringIndex(start, index - textStart);
                         Node textNode = new Node();
                         textNode.name = "text".getBytes(StandardCharsets.UTF_8);
-                        textNode.text = stringIndex;
+                        textNode.text = stringIndex;*/
                         //todo 节点之间的内容   两个思路 ， 一种是当做文本节点处理
                         // 另一种是给node节点加上节点开始和节点结束索引， 后边实际需要获取文本时，根据前后节点的信息，推断文本快位置
                     }
@@ -203,7 +196,7 @@ public class HtmlNodeParse {
 
     public static int addNode(Node[] stack, int stackTop, Node node) {
         //判断是不是空标签
-        if (isEmptyTagName(node.nameHash, node.name.length)) { //如果是空标签当作闭合处理
+        if (node.selfClose || isEmptyTagName(node.nameHash, node.name.length)) { //如果是空标签当作闭合处理
             int openEndIndex = node.openEndIndex;
             node.closeStartIndex = openEndIndex;
             node.closeEndIndex = openEndIndex;
@@ -212,14 +205,6 @@ public class HtmlNodeParse {
         } else { //非空标签，放入栈中
             stack[++stackTop] = node;
         }
-
-/*        //boolean isDiv = byteArrayIsEqual(node.name, "div".getBytes(StandardCharsets.UTF_8));
-        if (isDiv || (!node.selfClose && !) {
-            stack[++stackTop] = node;
-        } else {
-            Node topNode = stack[stackTop];
-            topNode.appendChild(node);
-        }*/
         return stackTop;
     }
 
@@ -495,8 +480,8 @@ public class HtmlNodeParse {
         if (slashIsStr == 0 && htmlBytes[index - 1] == '/') {
             //开始标签 自闭合
             node.selfClose = true;
-            node.closeStartIndex = endIndex;
-            node.closeEndIndex = endIndex;
+            // node.closeStartIndex = endIndex;
+            // node.closeEndIndex = endIndex;
         }
 
 
@@ -623,8 +608,6 @@ public class HtmlNodeParse {
     }
 
 
-    //  todo 现在调用改方法的都是为了把开始标签的名称 或者结束标签的名称转小写，
-    //  还有个思路是调用UTF8ByteCharToLowerCaseHash方法，用一个long类型代表标签名称，这样后边比较操作就会快很多
     //utf8字符转小写, 使用查表方法
     public static void UTF8ByteToLowerCase(byte[] src, int srcPos, byte[] dst, int dstPos, int length) {
         byte[] table = alphaConvertTable;
@@ -696,13 +679,13 @@ public class HtmlNodeParse {
 
                 if (isNeedTagName) {
 
-                    node.closeEndIndex  = nextIndex;
+                    node.closeEndIndex = nextIndex;
                     //找到结束标签，
                     if (nextC != '>') {
                         constructPosition++;
-                        node.closeEndIndex  = constructIndex[constructPosition-1];
+                        node.closeEndIndex = constructIndex[constructPosition - 1];
                     }
-                    node.closeStartIndex  = index;
+                    node.closeStartIndex = index;
                     return constructPosition;
                 }
 

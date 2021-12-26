@@ -27,9 +27,10 @@ public class ParseTest {
 
         try {
             byte[] finalHtmlBytes = FileUtils.readFileToByteArray(new File(htmlFiles[0]));
-            int[] constructIndex = HTMLConstructAnalysis.whiteSpaceStartAndEndIndex(finalHtmlBytes);
+
             for (int i = 0; i < 10000; i++) {
                 long startNanos_16_36 = System.nanoTime();
+                int[] constructIndex = HTMLConstructAnalysis.whiteSpaceStartAndEndIndex(finalHtmlBytes);
                 Node root = HtmlNodeParse.parse(finalHtmlBytes, constructIndex);
                 long endNanos_16_38 = System.nanoTime();
                 System.out.println((endNanos_16_38 - startNanos_16_36) / 1000000.0);
