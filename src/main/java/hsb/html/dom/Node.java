@@ -7,10 +7,19 @@ import hsb.html.StringIndex;
 public class Node {
 
     Node[] children = new Node[4];
-    Node[] textChildren = new Node[5];
+    //Node[] textChildren = new Node[5];
+
+    //使用四个变量记录节点在原文中定位，方便提取字符串等操作. <div  id ='a' class='f' >
+    public int openStartIndex;
+    public int openEndIndex;
+    // </div> < 和 >的位置，对于自闭和标签，这两个值都等于openEndIndex
+    public int closeStartIndex;
+    public int closeEndIndex;
 
     //标签名称
     public byte[] name;
+
+    public long nameHash = 0;
 
     //一般都通过id 或者 class找元素，所以把这两个单独拿出来
     public byte[] id;
@@ -50,12 +59,12 @@ public class Node {
         children[size1++] = node;
     }
 
-    public void appendTextChild(Node node) {
+/*    public void appendTextChild(Node node) {
         if (size2 >= cap2) {
             textChildExpandCapacity(cap1 + 1);
         }
         textChildren[size2++] = node;
-    }
+    }*/
 
     //只包含元素节点，非空节点或者文本节点都不包含
     public Node children(int index) {
@@ -78,7 +87,9 @@ public class Node {
         int a = index & 0x1;
         index = index >> 1;
         if (a == 0) { //偶数
-            n = textChildren[index];
+            //   n = textChildren[index];
+            //todo 如果是chrome，这里代表文本标签
+            n = null;
         } else { //奇数
             n = children[index];
         }
@@ -93,18 +104,18 @@ public class Node {
         cap1 = newCap;
     }
 
-    public void textChildExpandCapacity(int newCap) {
+/*    public void textChildExpandCapacity(int newCap) {
         Node[] n = new Node[newCap];
         System.arraycopy(textChildren, 0, n, 0, textChildren.length);
         textChildren = n;
         cap2 = newCap;
-    }
+    }*/
 
 
     @Override
     public String toString() {
         return "Node{" +
-                "name='" + new String(name)  + '\'' +
+                "name='" + new String(name) + '\'' +
                 ", id=" + (id != null ? new String(id) : null) +
                 ", allClass=" + (allClass != null ? new String(allClass) : "") +
                 '}';

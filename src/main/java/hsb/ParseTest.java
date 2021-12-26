@@ -25,41 +25,20 @@ public class ParseTest {
                 "C:\\Users\\h6706\\Desktop\\az0vn-uwu6s.html"
         };
 
-        int threadCount = 6;
-        CountDownLatch countDownLatch = new CountDownLatch(threadCount);
-        long startNanos_34_31 = System.nanoTime();
-        for (int i = 0; i < threadCount; i++) {
-            byte[] htmlBytes = null;
-            try {
-                htmlBytes = FileUtils.readFileToByteArray(new File(htmlFiles[0]));
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-
-            byte[] finalHtmlBytes = htmlBytes;
-            new Thread(new Runnable() {
-                @Override
-                public void run() {
-                    for (int i = 0; i < 5000; i++) {
-
-                     //   int[] constructIndex = HTMLConstructAnalysis.whiteSpaceStartAndEndIndex(finalHtmlBytes);
-                      //  Node root = HtmlNodeParse.parse(finalHtmlBytes, constructIndex);
-
-                        String s = new String(finalHtmlBytes);
-                        Document parse = Jsoup.parse(s);
-
-                    }
-                    countDownLatch.countDown();
-                }
-            }).start();
-        }
         try {
-            countDownLatch.await();
-        } catch (Exception e) {
+            byte[] finalHtmlBytes = FileUtils.readFileToByteArray(new File(htmlFiles[0]));
+            int[] constructIndex = HTMLConstructAnalysis.whiteSpaceStartAndEndIndex(finalHtmlBytes);
+            for (int i = 0; i < 10000; i++) {
+                long startNanos_16_36 = System.nanoTime();
+                Node root = HtmlNodeParse.parse(finalHtmlBytes, constructIndex);
+                long endNanos_16_38 = System.nanoTime();
+                System.out.println((endNanos_16_38 - startNanos_16_36) / 1000000.0);
+            }
+        } catch (IOException e) {
             e.printStackTrace();
         }
-        long endNanos_34_33 = System.nanoTime();
-        System.out.println((endNanos_34_33 - startNanos_34_31) / (threadCount * 5000) / 1000000.0);
+
+
     }
 
 

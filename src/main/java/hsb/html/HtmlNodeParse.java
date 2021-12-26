@@ -9,34 +9,59 @@ import java.nio.charset.StandardCharsets;
 public class HtmlNodeParse {
     //可以是单标签，也可以是双标签的元素,这个主要放这里便与查阅
     static final String[] NoMustSingleTag = new String[]{"colgroup"};
-    //单标签元素 , 还有可省略闭合标签的元素
-    static final String[] emptyTagNameStr = new String[]{"br", "img", "wbr", "col", "img", "area", "meta", "link", "base", "embed", "input", "keygen", "colgroup"};
+    //可以是单标签，也可以是双标签的元素,这个主要放这里便与查阅
+    static final String[] textTag = new String[]{"title", "script", "textarea"};
+    static final long[] textTagHash = new long[textTag.length];
 
-    static final int[][] tagNameLengthIndex = new int[10][2];
+
+    //单标签元素 , 也就是闭合标签一定被省略
+    //todo 注意br标签是个特列，</br> 会被当作一个标签处理
+    static final String[] emptyTagNameStr = new String[]{"br", "img", "wbr", "col", "area", "meta", "link", "base", "embed", "input", "keygen", "colgroup"};
+
+    static final int[][] tagNameLengthIndex = new int[15][2];
 
     //已经过时的元素，这些元素直接丢弃就行
     static final String[] removeTag = new String[]{"frame"};
 
     static final byte[][] emptyTagName = new byte[emptyTagNameStr.length][];
+    static final long[] emptyTagNameHash = new long[emptyTagNameStr.length];
+
     //用于字母大写转小写的表
-    public static byte[] alphaTable = new byte[256];
+    public static byte[] alphaConvertTable = new byte[256];
+    //用于判读是不是字母
+    public static boolean[] alphaTable = new boolean[256];
 
     static {
         for (int i = 0; i < emptyTagNameStr.length; i++) {
             byte[] nameBytes = emptyTagNameStr[i].getBytes(StandardCharsets.UTF_8);
             emptyTagName[i] = nameBytes;
+            emptyTagNameHash[i] = tagNameByteToLong(nameBytes);
             tagNameLengthIndex[nameBytes.length][1] = i;
             tagNameLengthIndex[nameBytes.length + 1][0] = i + 1;
         }
 
+
+        for (int i = 0; i < textTag.length; i++) {
+            textTagHash[i] = tagNameByteToLong(textTag[i].getBytes(StandardCharsets.UTF_8));
+        }
+
+
         for (int i = 0; i < 256; i++) {
-            alphaTable[i] = (byte) i;
+            alphaConvertTable[i] = (byte) i;
         }
 
         for (int i = 65, j = 97; i <= 90; i++, j++) {
-            alphaTable[i] = (byte) j;
+            alphaConvertTable[i] = (byte) j;
         }
 
+
+        for (int i = 0; i < 256; i++) {
+            if ((i >= 'A' && i <= 'Z') || (i >= 'a' && i <= 'z')) {
+                alphaTable[i] = true;
+            } else {
+                alphaTable[i] = false;
+            }
+        }
     }
 
     /**
@@ -45,12 +70,11 @@ public class HtmlNodeParse {
      * 如果把结构提取和解析两个过程拆开，
      * parse部分，按照单线程为基准1  2线程为1.79   3线程为2.35  6线程为2.79   12线程2.53
      * 通过vtune查看，好像3线程时，就基本把内存带宽跑满了  肯能是同时使用两个数组导致读取加倍了。
-     *
-     *
+     * <p>
+     * <p>
      * jsoup   1线程1   3线程2.4   6线程3.7
      * 1线程时，比jsoup快8倍  6线程比jsoup快4倍
-     *
-     * */
+     */
     public static Node parse(byte[] htmlBytes, int[] constructIndex) {
 
         Node root = new Node();
@@ -85,7 +109,7 @@ public class HtmlNodeParse {
                     } else {
                         //获取<!DOCTYPE html>标签，是否有可能是内嵌文档，文档里嵌文档? 暂时先按照丢弃处理
                         constructPositions[0] = constructPosition;
-                        Node node = readTag(htmlBytes, index + 2, constructIndex, constructPositions);
+                        Node node = readTag(htmlBytes, index + 1, constructIndex, constructPositions);
                         constructPosition = constructPositions[0];
                         findTextEnd = true;
                         start = constructIndex[constructPosition - 1] + 1;
@@ -99,7 +123,12 @@ public class HtmlNodeParse {
                       chrome会认为 </br />   </br/>    这两种写法等价于<br>
                       */
                     int tagNameEndIndex = constructIndex[constructPosition++];
+                    int tagEndIndex = 0;
+/*                    if (!alphaTable[htmlBytes[index + 2]]) { //不是以</ + 字母开始的，可以把这一部分当作注释处理
+                    }*/
+
                     if (htmlBytes[tagNameEndIndex] == '>') {
+                        tagEndIndex = tagNameEndIndex;
                         start = tagNameEndIndex + 1;
                         //这个if分支是为了处理  </br/> 这样的结构
                         if (htmlBytes[tagNameEndIndex - 1] == '/') {
@@ -107,34 +136,39 @@ public class HtmlNodeParse {
                         }
                         tagNameEndIndex--;
                     } else {
-                        start = constructIndex[constructPosition++] + 1;
+
+                        tagEndIndex = constructIndex[constructPosition++];
+                        start = tagEndIndex + 1;
                     }
                     int t = index + 2;
-                    //String tagName = new String(htmlBytes, t, tagNameEndIndex - t + 1).toLowerCase();
-
                     //遇到闭合标签，因次应该更新dom结构树
                     findTextEnd = true;
+                    int nameLen = tagNameEndIndex - t + 1;
+                    long lowNameHash = UTF8ByteCharToLowerCaseHash(htmlBytes, t, nameLen);
+                    stackTop = closeTag(stack, stackTop, lowNameHash, nameLen, index, tagEndIndex);
 
-                    int len = tagNameEndIndex - t + 1;
-
-                    byte[] lowTagName = new byte[len];
-                    UTF8ByteToLowerCase(htmlBytes, t, lowTagName, 0, len);
-                    //stackTop = closeTag(stack, stackTop, htmlBytes, t, len);
-                    stackTop = closeTag(stack, stackTop, lowTagName);
                 } else if (next == '?') {
                     //chrome把 <?当作注释处理  <?  和  >  中间的内容都是注释
                     constructPosition = skipAnnotation2(htmlBytes, constructIndex, constructPosition, cLength);
                 } else if ((next >= 'A' && next <= 'Z') || (next >= 'a' && next <= 'z')) {
+                    //else if (alphaTable[next]) {
                     constructPositions[0] = constructPosition;
                     //跳转到标签开始
-                    Node node = readTag(htmlBytes, index + 1, constructIndex, constructPositions);
+                    Node node = readTag(htmlBytes, index, constructIndex, constructPositions);
                     constructPosition = constructPositions[0];
                     findTextEnd = true;
                     //更新start位置
                     start = constructIndex[constructPosition - 1] + 1;
                     stackTop = addNode(stack, stackTop, node);
 
-                    //todo 对于像是script之类的标签，其中的内容应该单独处理，如果脚本中遇到 <div 或 ”<div“ 的结构 ，就会导致解析出错
+
+                    //script和textarea标签都有个特点，就是如果遇到</script>  </script >  </textarea> </textarea >，就一定代表闭合了.
+                    if (isTextTag(node.nameHash)) {
+                        constructPosition = consumeText(htmlBytes, constructIndex, constructPosition, node);
+                        Node parent = stack[--stackTop];
+                        parent.appendChild(node);
+                        node.close = true;
+                    }
                 }
 
                 if (findTextEnd) {
@@ -168,14 +202,24 @@ public class HtmlNodeParse {
 
 
     public static int addNode(Node[] stack, int stackTop, Node node) {
-        //判断是不是空标签,如果是空标签当作闭合处理
-        boolean isDiv = byteArrayIsEqual(node.name, "div".getBytes(StandardCharsets.UTF_8));
-        if (isDiv || (!node.selfClose && !isEmptyTagName(node.name))) {
+        //判断是不是空标签
+        if (isEmptyTagName(node.nameHash, node.name.length)) { //如果是空标签当作闭合处理
+            int openEndIndex = node.openEndIndex;
+            node.closeStartIndex = openEndIndex;
+            node.closeEndIndex = openEndIndex;
+            Node topNode = stack[stackTop];
+            topNode.appendChild(node);
+        } else { //非空标签，放入栈中
+            stack[++stackTop] = node;
+        }
+
+/*        //boolean isDiv = byteArrayIsEqual(node.name, "div".getBytes(StandardCharsets.UTF_8));
+        if (isDiv || (!node.selfClose && !) {
             stack[++stackTop] = node;
         } else {
             Node topNode = stack[stackTop];
             topNode.appendChild(node);
-        }
+        }*/
         return stackTop;
     }
 
@@ -186,19 +230,32 @@ public class HtmlNodeParse {
      * todo  name是标签名称， 因为一般标签的字节长度是 1 -  5 ，完全可以用一个long类型标签，这样比较的时候也能减少比较次数
      * todo  对是byte[] 映射到long类型的算法  目前想到的是字母只有低7位有效，通过或运算，左移7位，一个long类型可以包含9个字节的信息。一般标签都不会出现重复值
      */
-    public static int closeTag(Node[] stack, int stackTop, byte[] name) {
-        //因为div标签出现的概率很高，如果等于div就不用判断是不是空标签了
-        boolean isDiv = byteArrayIsEqual(name, "div".getBytes(StandardCharsets.UTF_8));
-        if (!isDiv && isEmptyTagName(name)) {  //空标签的闭合标签直接丢弃处理
+    public static int closeTag(Node[] stack, int stackTop, long nameHash, int nameLen, int closeStartIndex, int closeEndIndex) {
+        if (isEmptyTagName(nameHash, nameLen)) {  //空标签的闭合标签直接丢弃处理
+            if (nameLen == 2) { //空标签中只有br的长度是2
+                Node brNode = new Node();
+                brNode.close = true;
+                //todo 如何确定位置赋值
+                brNode.openStartIndex = closeStartIndex;
+                brNode.openEndIndex = closeEndIndex;
+                brNode.closeStartIndex = closeEndIndex;
+                brNode.closeEndIndex = closeEndIndex;
+                //br标签比较特殊，当作一个标签处理
+                Node topNode = stack[stackTop];
+                topNode.appendChild(brNode);
+            }
             return stackTop;
         }
 
         Node node = stack[stackTop];
-        boolean nameEq = byteArrayIsEqual(name, node.name);
+        boolean nameEq = (node.nameHash == nameHash);
         if (nameEq) {
             Node parent = stack[--stackTop];
             parent.appendChild(node);
             node.close = true;
+            node.closeStartIndex = closeStartIndex;
+            node.closeEndIndex = closeEndIndex;
+
         } else {
             System.out.println("标签不配对");
             /*
@@ -215,7 +272,7 @@ public class HtmlNodeParse {
             Node parent = stack[--stackTop];
             parent.appendChild(node);
 
-            stackTop = closeTag(stack, stackTop, name);
+            stackTop = closeTag(stack, stackTop, nameHash, nameLen, closeStartIndex, closeEndIndex);
         }
         return stackTop;
     }
@@ -235,6 +292,20 @@ public class HtmlNodeParse {
         return false;
     }
 
+
+    public static boolean isEmptyTagName(long nameHash, int nameLen) {
+        int[] index = HtmlNodeParse.tagNameLengthIndex[nameLen];
+        long[] emptyTagNameHash = HtmlNodeParse.emptyTagNameHash;
+        int tagStart = index[0];
+        int tagEnd = index[1];
+        //判断是不是空标签,如果是空标签当作闭合处理
+        for (int i = tagStart; i <= tagEnd; i++) {
+            if (emptyTagNameHash[i] == nameHash) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     public static boolean isEmptyTagName(byte[] name, int start, int length) {
         //emptyTagName中字节数组是有序的，可以根据长度跳过一部分
@@ -276,15 +347,13 @@ public class HtmlNodeParse {
      * 'cd     ''
      * <p>
      */
-    // start标签开始 第一个字母所在位置
+    // start标签开始 <的位置
     public static Node readTag(byte[] htmlBytes, int start, int[] constructIndex, int[] constructPositions) {
         Node node = new Node();
+        node.openStartIndex = start++;
+
         int constructPosition = constructPositions[0];
         int index = constructIndex[constructPosition++];
-
-        //当作结构字符处理的双引号和单引号数量,主要用于文本标签  比如 script  area等标签内配对引号
-        int doubleQuoteCount = 0;
-        int singleQuoteCount = 0;
 
         byte[] id = null;
         byte[] allClass = null;
@@ -309,7 +378,7 @@ public class HtmlNodeParse {
         }
 
         node.name = nameBytes;
-
+        node.nameHash = tagNameByteToLong(nameBytes);
         //读取等号 判断等号左侧是否的id  或者class ，否则的话先不解析直接跳过
 
         while (!findEnd) {
@@ -420,11 +489,17 @@ public class HtmlNodeParse {
 
         }
 
+        int endIndex = constructIndex[constructPosition - 1];
+        node.openEndIndex = endIndex;
         //标签结束  如果有 / 则按自闭和处理
         if (slashIsStr == 0 && htmlBytes[index - 1] == '/') {
             //开始标签 自闭合
             node.selfClose = true;
+            node.closeStartIndex = endIndex;
+            node.closeEndIndex = endIndex;
         }
+
+
         constructPositions[0] = constructPosition;
         return node;
     }
@@ -536,10 +611,11 @@ public class HtmlNodeParse {
 
     //utf8字符转小写, 使用查表方法,并且将小写后内容左hash， 也即是左移和或运算， 生成long返回
     public static long UTF8ByteCharToLowerCaseHash(byte[] name, int start, int length) {
-        byte[] table = alphaTable;
+        byte[] table = alphaConvertTable;
         length = Math.min(9, length);
         long hash = table[name[start]];
         int end = start + length;
+
         for (int i = start + 1; i < end; i++) {
             hash = ((hash << 7) | table[name[i]]);
         }
@@ -551,7 +627,7 @@ public class HtmlNodeParse {
     //  还有个思路是调用UTF8ByteCharToLowerCaseHash方法，用一个long类型代表标签名称，这样后边比较操作就会快很多
     //utf8字符转小写, 使用查表方法
     public static void UTF8ByteToLowerCase(byte[] src, int srcPos, byte[] dst, int dstPos, int length) {
-        byte[] table = alphaTable;
+        byte[] table = alphaConvertTable;
         int loopLength = dstPos + length;
         for (int i = srcPos, j = dstPos; j < loopLength; i++, j++) {
             dst[j] = table[src[i]];
@@ -571,11 +647,69 @@ public class HtmlNodeParse {
         length = Math.min(length, 9);
         long hash = name[start];
         int end = start + length;
+        //这地方要是能一次性加载8字节，那么根据length的值，左移一定位数，也可以当作hash。
         for (int i = start + 1; i < end; i++) {
             hash = (hash << 7) | name[i];
         }
-        return -1;
+        return hash;
     }
 
+    public static boolean isTextTag(long nameHash) {
+        long[] textTagHash = HtmlNodeParse.textTagHash;
+        for (long tagHash : textTagHash) {
+            if (nameHash == tagHash) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 查找闭合标签，当闭合标签名称等于tagName时结束
+     */
+    public static int consumeText(byte[] htmlBytes, int[] constructIndex, int constructPosition, Node node) {
+        byte[] tagName = node.name;
+        int endC = constructIndex[0];
+        while (constructPosition < endC) {
+            int index = constructIndex[constructPosition++];
+            byte c = htmlBytes[index];
+
+            if (c == '<') {
+                int nextIndex = constructIndex[constructPosition++];
+                byte nextC = htmlBytes[nextIndex];
+                int closeTagLen = 0;
+                if (nextC == '>') {
+                    closeTagLen = nextIndex - index - 2;
+                } else {
+                    closeTagLen = nextIndex - index - 1;
+                }
+                boolean isNeedTagName = false;
+                if (closeTagLen == tagName.length) { //标签长度匹配，可能是闭合标签 ，
+                    int end = index + 2 + closeTagLen;
+                    int noEqCount = 0;
+                    for (int i = (index + 2), j = 0; i < end; i++, j++) {
+                        //这里应该只能是字母？ 所有直接把字节第6位置1
+                        noEqCount += (htmlBytes[i] | 0x20) ^ tagName[j];
+                    }
+                    isNeedTagName = noEqCount == 0 ? true : false;
+                }
+
+                if (isNeedTagName) {
+
+                    node.closeEndIndex  = nextIndex;
+                    //找到结束标签，
+                    if (nextC != '>') {
+                        constructPosition++;
+                        node.closeEndIndex  = constructIndex[constructPosition-1];
+                    }
+                    node.closeStartIndex  = index;
+                    return constructPosition;
+                }
+
+            }
+
+        }
+        return constructPosition;
+    }
 
 }
