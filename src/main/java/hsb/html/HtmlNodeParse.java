@@ -1,6 +1,8 @@
 package hsb.html;
 
 import hsb.html.dom.Node;
+import hsb.html.help.ObjectAddress;
+
 import java.nio.charset.StandardCharsets;
 
 public class HtmlNodeParse {
@@ -75,7 +77,7 @@ public class HtmlNodeParse {
         Node[] stack = new Node[256];
         stack[0] = root;
         int stackTop = 0;
-
+        long arrAddress = ObjectAddress.addressOf(htmlBytes);
         //Node topNode = root;
         int[] constructPositions = new int[1];
         int start = 0;
@@ -101,7 +103,7 @@ public class HtmlNodeParse {
                     } else {
                         //获取<!DOCTYPE html>标签，是否有可能是内嵌文档，文档里嵌文档? 暂时先按照丢弃处理
                         constructPositions[0] = constructPosition;
-                        Node node = readTag(htmlBytes, index + 1, constructIndex, constructPositions);
+                        Node node = readTag(htmlBytes, arrAddress, index + 1, constructIndex, constructPositions);
                         constructPosition = constructPositions[0];
                         findTextEnd = true;
                         start = constructIndex[constructPosition - 1] + 1;
@@ -135,7 +137,7 @@ public class HtmlNodeParse {
                     //遇到闭合标签，因次应该更新dom结构树
                     findTextEnd = true;
                     int nameLen = tagNameEndIndex - t + 1;
-                    long lowNameHash = UTF8ByteCharToLowerCaseHash(htmlBytes, t, nameLen);
+                    long lowNameHash = UTF8ByteCharToLowerCaseHash(htmlBytes, arrAddress, t, nameLen);
                     stackTop = closeTag(stack, stackTop, lowNameHash, nameLen, index, tagEndIndex);
 
                 } else if (next == '?') {
@@ -145,7 +147,7 @@ public class HtmlNodeParse {
                     //else if (alphaTable[next]) {
                     constructPositions[0] = constructPosition;
                     //跳转到标签开始
-                    Node node = readTag(htmlBytes, index, constructIndex, constructPositions);
+                    Node node = readTag(htmlBytes, arrAddress, index, constructIndex, constructPositions);
                     boolean isTextTag = isTextTag(node.nameHash);
                     constructPosition = constructPositions[0];
                     findTextEnd = true;
@@ -220,7 +222,6 @@ public class HtmlNodeParse {
             if (nameLen == 2) { //空标签中只有br的长度是2
                 Node brNode = new Node();
                 brNode.close = true;
-                //todo 如何确定位置赋值
                 brNode.openStartIndex = closeStartIndex;
                 brNode.openEndIndex = closeEndIndex;
                 brNode.closeStartIndex = closeEndIndex;
@@ -333,7 +334,7 @@ public class HtmlNodeParse {
      * <p>
      */
     // start标签开始 <的位置
-    public static Node readTag(byte[] htmlBytes, int start, int[] constructIndex, int[] constructPositions) {
+    public static Node readTag(byte[] htmlBytes, long arrAddress, int start, int[] constructIndex, int[] constructPositions) {
         Node node = new Node();
         node.openStartIndex = start++;
 
@@ -354,16 +355,14 @@ public class HtmlNodeParse {
                 index--;
             }
             nameBytes = new byte[index - start];
-            UTF8ByteToLowerCase(htmlBytes, start, nameBytes, 0, nameBytes.length);
-            //start指向>结束后第一个位置
-            start = index + 3;
         } else {
             nameBytes = new byte[index - start + 1];
-            UTF8ByteToLowerCase(htmlBytes, start, nameBytes, 0, nameBytes.length);
         }
 
+        UTF8ByteToLowerCase(htmlBytes, start, nameBytes, 0, nameBytes.length);
+        node.nameHash = UTF8ByteCharToLowerCaseHash(htmlBytes, arrAddress, start, nameBytes.length);
         node.name = nameBytes;
-        node.nameHash = tagNameByteToLong(nameBytes);
+
         //读取等号 判断等号左侧是否的id  或者class ，否则的话先不解析直接跳过
 
         while (!findEnd) {
@@ -595,15 +594,25 @@ public class HtmlNodeParse {
     }
 
     //utf8字符转小写, 使用查表方法,并且将小写后内容左hash， 也即是左移和或运算， 生成long返回
-    public static long UTF8ByteCharToLowerCaseHash(byte[] name, int start, int length) {
-        byte[] table = alphaConvertTable;
+    public static long UTF8ByteCharToLowerCaseHash(byte[] name, long arrAddress, int start, int length) {
+        length = (8 - Math.min(length, 8)) << 3;
+        //      = name[start];
+        //   int end = start + length;
+
+
+        long hash = ObjectAddress.getArrayData(arrAddress, start);
+        //long hash = ObjectAddress.theUnsafe.getLong(arrAddress + start + ObjectAddress.getArrayObjectBase());
+
+        hash = (hash | 0x2020202020202020L) & (0xFFFFFFFFFFFFFFFFL >>> length);
+
+/*        byte[] table = alphaConvertTable;
         length = Math.min(9, length);
         long hash = table[name[start]];
         int end = start + length;
 
         for (int i = start + 1; i < end; i++) {
             hash = ((hash << 7) | table[name[i]]);
-        }
+        }*/
         return hash;
     }
 
@@ -627,13 +636,21 @@ public class HtmlNodeParse {
      * 现在主要是byte[] 映射到long类型的算法不太成熟，  目前想到的是字母只有低7位有效，通过或运算，左移7位，一个long类型可以包含9个字节的信息。一般不会出错
      */
     public static long tagNameByteToLong(byte[] name, int start, int length) {
-        length = Math.min(length, 9);
-        long hash = name[start];
-        int end = start + length;
+        length = (8 - Math.min(length, 8)) << 3;
+        //      = name[start];
+        //   int end = start + length;
+
+        long arrAddress = ObjectAddress.addressOf(name);
+        //从name[start]读取8字节，正好是一个long的长度
+        long hash = ObjectAddress.getArrayData(arrAddress, start);
+        //   long hash    = ObjectAddress.theUnsafe.getLong(arrAddress + start + ObjectAddress.getArrayObjectBase());
+        //大写转小写，跟后根据name的实际长度截取
+        hash = (hash | 0x2020202020202020L) & (0xFFFFFFFFFFFFFFFFL >>> length);
+
         //这地方要是能一次性加载8字节，那么根据length的值，左移一定位数，也可以当作hash。
-        for (int i = start + 1; i < end; i++) {
+/*        for (int i = start + 1; i < end; i++) {
             hash = (hash << 7) | name[i];
-        }
+        }*/
         return hash;
     }
 

@@ -36,7 +36,7 @@ import java.util.Arrays;
  */
 public class ObjectAddress {
     // private static VarHandle theUnsafe;
-    private static Unsafe theUnsafe;
+    public static Unsafe theUnsafe;
 
     //数组类型对象的 object[0] 所在位置和对象其实位置之间的偏移 ， 包括对象头，地址，数组长度
     private static int arrayObjectBase;
@@ -87,7 +87,17 @@ public class ObjectAddress {
         }
     }
 
-
+    /**
+     * 获取数组中指定偏移的数据，
+     * @param address 地址
+     * @param index 字节为单位的偏移量
+     * @return 返回8字节内容
+     *
+     * */
+    public static long getArrayData(long address,int index) {
+        long longData = theUnsafe.getLong(address + arrayObjectBase + index);
+        return longData;
+    }
     /**
      * copy  jol-core中的实现
      */

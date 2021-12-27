@@ -82,7 +82,6 @@ public class HTMLConstructAnalysis {
         return memoryAddress;
     }
 
-
     public static int[] whiteSpaceStartAndEndIndex_Jni(byte[] htmlBytes) {
         ResourceScope scope = ResourceScope.newConfinedScope();
         int[] result = new int[htmlBytes.length / 3];
