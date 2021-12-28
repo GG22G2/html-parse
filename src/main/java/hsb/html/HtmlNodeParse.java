@@ -73,13 +73,13 @@ public class HtmlNodeParse {
 
         Node root = new Node();
         root.name = "#root".getBytes(StandardCharsets.UTF_8);
+        root.nameHash = tagNameByteToLong(root.name);
         //默认最大栈不会大于256 , 大于的话再说吧
         Node[] stack = new Node[256];
         stack[0] = root;
         int stackTop = 0;
         long arrAddress = ObjectAddress.addressOf(htmlBytes);
         //Node topNode = root;
-        int[] constructPositions = new int[1];
         int start = 0;
         int constructPosition = 1;
         int textStart;
@@ -102,11 +102,11 @@ public class HtmlNodeParse {
                         constructPosition = skipAnnotation(htmlBytes, constructIndex, constructPosition, cLength);
                     } else {
                         //获取<!DOCTYPE html>标签，是否有可能是内嵌文档，文档里嵌文档? 暂时先按照丢弃处理
-                        constructPositions[0] = constructPosition;
-                        Node node = readTag(htmlBytes, arrAddress, index + 1, constructIndex, constructPositions);
-                        constructPosition = constructPositions[0];
+                        Node node = readTag(htmlBytes, arrAddress, index + 1, constructIndex, constructPosition);
+                        constructPosition = node.copenEndIndex;
+                        start = constructIndex[constructPosition] + 1;
+                        constructPosition++;
                         findTextEnd = true;
-                        start = constructIndex[constructPosition - 1] + 1;
                     }
                 } else if (next == '/') {
                     /*
@@ -145,16 +145,15 @@ public class HtmlNodeParse {
                     constructPosition = skipAnnotation2(htmlBytes, constructIndex, constructPosition, cLength);
                 } else if ((next >= 'A' && next <= 'Z') || (next >= 'a' && next <= 'z')) {
                     //else if (alphaTable[next]) {
-                    constructPositions[0] = constructPosition;
                     //跳转到标签开始
-                    Node node = readTag(htmlBytes, arrAddress, index, constructIndex, constructPositions);
+                    Node node = readTag(htmlBytes, arrAddress, index, constructIndex, constructPosition);
                     boolean isTextTag = isTextTag(node.nameHash);
-                    constructPosition = constructPositions[0];
+                    constructPosition = node.copenEndIndex; // constructPosition指向>
                     findTextEnd = true;
                     //更新start位置
-                    start = constructIndex[constructPosition - 1] + 1;
+                    start = constructIndex[constructPosition] + 1;
                     stackTop = addNode(stack, stackTop, node);
-
+                    constructPosition++;
 
                     //script和textarea标签都有个特点，就是如果遇到</script>  </script >  </textarea> </textarea >，就一定代表闭合了.
                     //这几种文本标签都是不允许自闭和的，需要忽略
@@ -169,13 +168,7 @@ public class HtmlNodeParse {
                 if (findTextEnd) {
                     //判断开始标签和 start之间是否有字符
                     if (index > textStart) { //当作文本标签处理
-                        //  String text = new String(htmlBytes, start, index - start);
-/*                        StringIndex stringIndex = new StringIndex(start, index - textStart);
-                        Node textNode = new Node();
-                        textNode.name = "text".getBytes(StandardCharsets.UTF_8);
-                        textNode.text = stringIndex;*/
-                        //todo 节点之间的内容   两个思路 ， 一种是当做文本节点处理
-                        // 另一种是给node节点加上节点开始和节点结束索引， 后边实际需要获取文本时，根据前后节点的信息，推断文本快位置
+                        // todo 给node节点加上节点开始和节点结束索引， 后边实际需要获取文本时，根据前后节点的信息，推断文本快位置
                     }
                     findTextEnd = false;
                 }
@@ -204,6 +197,7 @@ public class HtmlNodeParse {
             node.closeEndIndex = openEndIndex;
             Node topNode = stack[stackTop];
             topNode.appendChild(node);
+            node.parent = topNode;
         } else { //非空标签，放入栈中
             stack[++stackTop] = node;
         }
@@ -229,6 +223,7 @@ public class HtmlNodeParse {
                 //br标签比较特殊，当作一个标签处理
                 Node topNode = stack[stackTop];
                 topNode.appendChild(brNode);
+                brNode.parent = topNode;
             }
             return stackTop;
         }
@@ -241,6 +236,7 @@ public class HtmlNodeParse {
             node.close = true;
             node.closeStartIndex = closeStartIndex;
             node.closeEndIndex = closeEndIndex;
+            node.parent = parent;
 
         } else {
             System.out.println("标签不配对");
@@ -334,15 +330,12 @@ public class HtmlNodeParse {
      * <p>
      */
     // start标签开始 <的位置
-    public static Node readTag(byte[] htmlBytes, long arrAddress, int start, int[] constructIndex, int[] constructPositions) {
+    public static Node readTag(byte[] htmlBytes, long arrAddress, int start, int[] constructIndex, int constructPosition) {
         Node node = new Node();
         node.openStartIndex = start++;
-
-        int constructPosition = constructPositions[0];
+        node.copenStartIndex = constructPosition - 1;
         int index = constructIndex[constructPosition++];
 
-        byte[] id = null;
-        byte[] allClass = null;
         byte c = htmlBytes[index];
         boolean findEnd = false;
         int slashIsStr = 0;  //0代表不是字符   1代表是字符
@@ -367,21 +360,21 @@ public class HtmlNodeParse {
 
         while (!findEnd) {
             index = constructIndex[constructPosition++];
-            c = htmlBytes[index];
+            //  c = htmlBytes[index];
+            long attributeStart = ObjectAddress.getArrayData(arrAddress, index);
 
-            if (c != '>') {
+            if ((attributeStart & 0xFFL) != '>') {
                 //index1 字符串左侧   index2 字符串右侧
                 int index1 = index;
                 int index2 = constructIndex[constructPosition++];
                 boolean needValue = false;
                 //判断 index2指向字母还是=
-                if (htmlBytes[index2] == '=') {
+                if (htmlBytes[index2] == '=') { //大部分都走的这个分支
                     index = index2;
                     index2 = index2 - 1;
                 } else if (htmlBytes[index2] == '>') {
                     //这个属性只有名称 没有值  可以丢弃
                     index = index2;  //index 指向 >
-                    findEnd = true;
                     break;
                 } else {
                     index = constructIndex[constructPosition++];
@@ -393,28 +386,20 @@ public class HtmlNodeParse {
                 }
                 int KeyLength = index2 - index1 + 1;
 
-                //如果是 id 或者 class属性
-                if (id == null && KeyLength == 2) { //长度是2  非常可能是id
-                    byte c1 = htmlBytes[index1];
-                    byte c2 = htmlBytes[index2];
-                    int idh = ((c1 | 0x20) << 8) | (c2 | 0x20);
-                    // 0x4944L=是 小写id 的16进制ascii拼接
-                    if (idh == 0x6964) {
-                        needValue = true;
-                    }
+                long attributeLong = attributeStart;
 
-                    //System.arraycopy();
-                } else if (allClass == null && KeyLength == 5) { //验证是不是class
-                    byte c1 = htmlBytes[index1];
-                    byte c2 = htmlBytes[index1 + 1];
-                    byte c3 = htmlBytes[index1 + 2];
-                    byte c4 = htmlBytes[index1 + 3];
-                    byte c5 = htmlBytes[index2];
-                    long classH = ((c1 | 0x20L) << 32) | ((c2 | 0x20L) << 24) | ((c3 | 0x20L) << 16) | ((c4 | 0x20L) << 8) | (c5 | 0x20L);
-                    // 0x636c617373L是 小写class 的16进制ascii拼接
-                    if (classH == 0x636c617373L) {
+                //todo 这里改成匹配id href class三种属性，对于a标签，href需要和 target配置判断是否是绝对路径
+                //如果是 id 或者 class属性
+                if (KeyLength <= 8) {
+                    int offset = (8 - KeyLength) << 3;
+                    attributeLong = (attributeLong | 0x2020202020202020L) & (0xFFFFFFFFFFFFFFFFL >>> offset);
+                    if (attributeLong == 0x7373616c63L || attributeLong == 0x6469L || attributeLong == 0x66657268L) {
                         needValue = true;
                     }
+                } else {
+                    //大于8字节的属性名，做压缩保存
+                    int loadCount = KeyLength >> 3;
+
                 }
 
 
@@ -433,17 +418,19 @@ public class HtmlNodeParse {
                 eqNext = htmlBytes[attrValueStart];
                 if (eqNext == '\"') { //只要是引号开始，就必须有对应的引号才算结束
                     //以 双引号开始的字符串
+                    attrValueStart++;
                     constructPosition = consumeDoubleQuoteStr(htmlBytes, constructIndex, constructPosition + 1);
-                    attrValueEnd = constructIndex[constructPosition++];
+                    attrValueEnd = constructIndex[constructPosition++]- 1;
                 } else if (eqNext == '\'') {
                     //单引号开始的字符串
+                    attrValueStart++;
                     constructPosition = consumeSingleQuoteStr(htmlBytes, constructIndex, constructPosition + 1);
-                    attrValueEnd = constructIndex[constructPosition++];
+                    attrValueEnd = constructIndex[constructPosition++] - 1;
                 } else if (eqNext == '>') {
                     //标签结束，等号后没有值，所以这个属性也可以丢弃了
-                    index = attrValueStart;
-                    findEnd = true;
-                    continue;
+                    // index = attrValueStart;
+                    //findEnd = true;
+                    break;
                 } else {
                     //字符串没有引号，找下一个空格，代表字符串结束
                     int[] rs = consumeUnQuoteStr(htmlBytes, constructIndex, constructPosition);
@@ -460,6 +447,9 @@ public class HtmlNodeParse {
 
                     if (KeyLength == 2) {
                         node.id = v;
+                    } else if (KeyLength == 4) {
+                        node.hrefStart = attrValueStart;
+                        node.hrefEnd = attrValueEnd;
                     } else {
                         node.allClass = v;
                     }
@@ -475,16 +465,12 @@ public class HtmlNodeParse {
 
         int endIndex = constructIndex[constructPosition - 1];
         node.openEndIndex = endIndex;
+        node.copenEndIndex = constructPosition - 1;
         //标签结束  如果有 / 则按自闭和处理
         if (slashIsStr == 0 && htmlBytes[index - 1] == '/') {
             //开始标签 自闭合
             node.selfClose = true;
-            // node.closeStartIndex = endIndex;
-            // node.closeEndIndex = endIndex;
         }
-
-
-        constructPositions[0] = constructPosition;
         return node;
     }
 
@@ -522,11 +508,7 @@ public class HtmlNodeParse {
     }
 
     public static int consumeDoubleQuoteStr(byte[] htmlBytes, int[] constructIndex, int constructPosition) {
-        if (htmlBytes[constructIndex[constructPosition++]] == '\"') {
-            return constructPosition - 1;
-        }
-        while (htmlBytes[constructIndex[constructPosition++]] != '\"') {
-        }
+        while (htmlBytes[constructIndex[constructPosition++]] != '\"') ;
         return constructPosition - 1;
     }
 
@@ -534,9 +516,6 @@ public class HtmlNodeParse {
      * 一些极端例子，没有对应的闭合引号，会一直遍历到文档结束，constructPosition有可能超出constructIndex长度。
      */
     public static int consumeSingleQuoteStr(byte[] htmlBytes, int[] constructIndex, int constructPosition) {
-        if (htmlBytes[constructIndex[constructPosition++]] == '\'') {
-            return constructPosition - 1;
-        }
         while (htmlBytes[constructIndex[constructPosition++]] != '\'') ;
         return constructPosition - 1;
     }
@@ -655,6 +634,7 @@ public class HtmlNodeParse {
     }
 
     public static boolean isTextTag(long nameHash) {
+        //todo  textTagHash只有四种值，不如当成立即数
         long[] textTagHash = HtmlNodeParse.textTagHash;
         for (long tagHash : textTagHash) {
             if (nameHash == tagHash) {

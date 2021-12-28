@@ -2,7 +2,9 @@ package hsb.html.dom;
 
 public class Node {
 
-    Node[] children = new Node[4];
+    public Node parent;
+
+    public Node[] children = new Node[4];
     //Node[] textChildren = new Node[5];
 
     //使用四个变量记录节点在原文中定位，方便提取字符串等操作. <div  id ='a' class='f' >
@@ -12,15 +14,18 @@ public class Node {
     public int closeStartIndex;
     public int closeEndIndex;
 
+    //结构索引位置,方便二次解析,如果需要解析属性，可以用这两个值从结构索引中快速
+    public int copenStartIndex;
+    public int copenEndIndex;
+
+
     //标签名称
     public byte[] name;
 
     public long nameHash = 0;
 
-    //一般都通过id 或者 class找元素，所以把这两个单独拿出来
+    //一般都通过id 或者 class找元素，所以把这两个属性的值单独保存
     public byte[] id;
-    //计算id的hash值，这个值要保证在这篇文档中，不同的id数组对应的idHash一定不同，每个文档一个字节数组到id的映射空间，暂时还没想出来咋做，所在暂时不用idHash
-    public long idHash = 0;
 
     //原始的 class内存
     public byte[] allClass;
@@ -28,6 +33,9 @@ public class Node {
     //class可能包含很多个子块，分割后保存
     public byte[][] classList;
 
+    //如果有链接属性的话，这里标记位置
+    public int hrefStart = -1;
+    public int hrefEnd = -1;
 
     //是否自闭合 只有在解析标签是遇到/> 这个值才可能是true ，之所以不是一定,是因为如<div id = fee/>，这个"fee/"都被当作id的值,chrome也是这么处理的
     //但实际上是否被当作自闭合，好像有严格限制，比如div就不允许自闭合，<div/>也会被认为是开始标签
@@ -35,22 +43,27 @@ public class Node {
     //代表标签闭合，用在程序中标记一个node节点处理完成
     public boolean close = false;
 
-    //Object[] attributes;
+    //todo 除了id class href之外的属性如何处理
+    //属性的名字，除了id class href，其他属性很少被用来做xpath选择器的元素。所以都放这里
+    public long[] attributeK;
+    public int attributeKIndex;
+    //属性值中存位置索引比如 title="I 我是标题!" ，attributeV[0]=I位置,attributeV[1]=!位置
+    public int[] attributeV;
+    public int attributeVIndex;
 
-    int cap1 = 4;
-    int cap2 = 5;
-    int size1 = 0;
-    int size2 = 0;
+    int cap = 4;
+    public int size = 0;
+
 
     public Node() {
 
     }
 
     public void appendChild(Node node) {
-        if (size1 >= cap1) {
-            ChildExpandCapacity(cap1 << 1);
+        if (size >= cap) {
+            ChildExpandCapacity(cap << 1);
         }
-        children[size1++] = node;
+        children[size++] = node;
     }
 
 /*    public void appendTextChild(Node node) {
@@ -95,7 +108,7 @@ public class Node {
         Node[] n = new Node[newCap];
         System.arraycopy(children, 0, n, 0, children.length);
         children = n;
-        cap1 = newCap;
+        cap = newCap;
     }
 
 /*    public void textChildExpandCapacity(int newCap) {
