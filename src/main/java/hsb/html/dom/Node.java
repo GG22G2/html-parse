@@ -1,5 +1,7 @@
 package hsb.html.dom;
 
+import java.util.Arrays;
+
 public class Node {
 
     public Node parent;
@@ -18,7 +20,7 @@ public class Node {
     public int copenStartIndex;
     public int copenEndIndex;
 
-
+    public int siblingIndex;
     //标签名称
     public byte[] name;
 
@@ -75,7 +77,10 @@ public class Node {
 
     //只包含元素节点，非空节点或者文本节点都不包含
     public Node children(int index) {
-        return children[index];
+        if (index < size) {
+            return children[index];
+        }
+        return null;
     }
 
     /**
@@ -122,9 +127,13 @@ public class Node {
     @Override
     public String toString() {
         return "Node{" +
-                "name='" + new String(name) + '\'' +
-                ", id=" + (id != null ? new String(id) : null) +
+                ", name=" + (name != null ? new String(name) : "") +
+                ", id=" + (id != null ? new String(id) : "") +
                 ", allClass=" + (allClass != null ? new String(allClass) : "") +
+                "openStartIndex=" + openStartIndex +
+                ", openEndIndex=" + openEndIndex +
+                ", closeStartIndex=" + closeStartIndex +
+                ", closeEndIndex=" + closeEndIndex +
                 '}';
     }
 }

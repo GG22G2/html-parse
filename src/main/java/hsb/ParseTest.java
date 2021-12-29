@@ -3,9 +3,14 @@ package hsb;
 import hsb.html.HtmlNodeParse;
 import hsb.html.dom.Node;
 import hsb.html.help.HTMLConstructAnalysis;
+import hsb.html.xpath.XElements;
+import hsb.html.xpath.XPathEvaluator;
+import hsb.html.xpath.XPathParser;
 import org.apache.commons.io.FileUtils;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
+import us.codecraft.xsoup.Xsoup;
+
 
 import java.io.File;
 import java.io.IOException;
@@ -26,9 +31,11 @@ public class ParseTest {
         };
 
         try {
-            byte[] finalHtmlBytes = FileUtils.readFileToByteArray(new File(htmlFiles[0]));
-
-            for (int i = 0; i < 10000; i++) {
+            byte[] finalHtmlBytes = FileUtils.readFileToByteArray(new File(htmlFiles[4]));
+            int[] constructIndex = HTMLConstructAnalysis.whiteSpaceStartAndEndIndex(finalHtmlBytes);
+            String shtml = new String(finalHtmlBytes);
+            XPathEvaluator parse = XPathParser.parse("//*[@id=\"normalthread_919674\"]/tr/th/a[2]");
+            for (int i = 0; i < 1; i++) {
                 long startNanos_16_36 = System.nanoTime();
                 int[] constructIndex = HTMLConstructAnalysis.whiteSpaceStartAndEndIndex(finalHtmlBytes);
                 Node root = HtmlNodeParse.parse(finalHtmlBytes, constructIndex);

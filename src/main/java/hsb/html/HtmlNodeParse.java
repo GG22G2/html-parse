@@ -162,6 +162,8 @@ public class HtmlNodeParse {
                         Node parent = stack[--stackTop];
                         parent.appendChild(node);
                         node.close = true;
+                        node.parent = parent;
+                        node.siblingIndex = parent.size-1;
                     }
                 }
 
@@ -198,6 +200,8 @@ public class HtmlNodeParse {
             Node topNode = stack[stackTop];
             topNode.appendChild(node);
             node.parent = topNode;
+            node.siblingIndex = topNode.size - 1;
+
         } else { //非空标签，放入栈中
             stack[++stackTop] = node;
         }
@@ -224,6 +228,7 @@ public class HtmlNodeParse {
                 Node topNode = stack[stackTop];
                 topNode.appendChild(brNode);
                 brNode.parent = topNode;
+                brNode.siblingIndex = topNode.size - 1;
             }
             return stackTop;
         }
@@ -237,7 +242,7 @@ public class HtmlNodeParse {
             node.closeStartIndex = closeStartIndex;
             node.closeEndIndex = closeEndIndex;
             node.parent = parent;
-
+            node.siblingIndex = parent.size - 1;
         } else {
             System.out.println("标签不配对");
             /*
@@ -253,7 +258,8 @@ public class HtmlNodeParse {
             //todo 现在把所有可省略闭合标签等同于一定省略闭合标签来处理了，可能会导致局部的dom结构和浏览器解析出来的结构不一致
             Node parent = stack[--stackTop];
             parent.appendChild(node);
-
+            node.parent = parent;
+            node.siblingIndex = parent.size - 1;
             stackTop = closeTag(stack, stackTop, nameHash, nameLen, closeStartIndex, closeEndIndex);
         }
         return stackTop;
@@ -420,7 +426,7 @@ public class HtmlNodeParse {
                     //以 双引号开始的字符串
                     attrValueStart++;
                     constructPosition = consumeDoubleQuoteStr(htmlBytes, constructIndex, constructPosition + 1);
-                    attrValueEnd = constructIndex[constructPosition++]- 1;
+                    attrValueEnd = constructIndex[constructPosition++] - 1;
                 } else if (eqNext == '\'') {
                     //单引号开始的字符串
                     attrValueStart++;
@@ -452,6 +458,7 @@ public class HtmlNodeParse {
                         node.hrefEnd = attrValueEnd;
                     } else {
                         node.allClass = v;
+
                     }
                 }
 
