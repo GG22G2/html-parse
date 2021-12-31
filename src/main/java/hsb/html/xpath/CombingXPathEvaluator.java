@@ -24,12 +24,22 @@ public class CombingXPathEvaluator implements XPathEvaluator {
     }
 
     @Override
-    public XElements evaluate(Node element) {
-        List<XElements> xElementses = new ArrayList<XElements>();
+    public List<Node> findAll(Node element) {
+        List<Node> results = new ArrayList<Node>();
         for (XPathEvaluator xPathEvaluator : xPathEvaluators) {
-            xElementses.add(xPathEvaluator.evaluate(element));
+            results.addAll(xPathEvaluator.findAll(element));
         }
-        return new CombiningDefaultXElements(xElementses);
+        return results;
+    }
+
+    @Override
+    public Node findFirst(Node element) {
+        return null;
+    }
+
+    @Override
+    public List<Node> findTag(Node element, String tagName) {
+        return null;
     }
 
     @Override

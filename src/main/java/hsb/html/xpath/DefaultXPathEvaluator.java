@@ -4,7 +4,10 @@ package hsb.html.xpath;
 import hsb.html.dom.Node;
 import hsb.html.select.Collector;
 import hsb.html.select.Evaluator;
+import hsb.html.select.NodeTraversor;
+import us.codecraft.xsoup.XElements;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -24,16 +27,32 @@ public class DefaultXPathEvaluator implements XPathEvaluator {
     }
 
     @Override
-    public XElements evaluate(Node element) {
+    public List<Node> findAll(Node element) {
         List elements;
         if (evaluator != null) {
             elements = Collector.collect(evaluator, element);
-        }
-        else {
+        } else {
             elements = new ArrayList(1);
             elements.add(element);
         }
-        return new DefaultXElements(elements, elementOperator);
+        return elements;
+    }
+
+    @Override
+    public Node findFirst(Node element) {
+        Node elements = null;
+        if (evaluator != null) {
+            elements = Collector.findFirst(evaluator, element);
+        }
+        return elements;
+    }
+
+    @Override
+    public List<Node> findTag(Node element, String tagName) {
+        Evaluator.Tag tagFilter = new Evaluator.Tag(tagName.getBytes(StandardCharsets.UTF_8));
+        List result = new ArrayList();
+        NodeTraversor.filterSingleEvaluator( element,tagFilter,result);
+        return result;
     }
 
     @Override

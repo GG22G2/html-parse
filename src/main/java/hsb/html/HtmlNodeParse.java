@@ -72,6 +72,7 @@ public class HtmlNodeParse {
     public static Node parse(byte[] htmlBytes, int[] constructIndex) {
 
         Node root = new Node();
+        root.rawHtml = htmlBytes;
         root.name = "#root".getBytes(StandardCharsets.UTF_8);
         root.nameHash = tagNameByteToLong(root.name);
         //默认最大栈不会大于256 , 大于的话再说吧
@@ -163,7 +164,7 @@ public class HtmlNodeParse {
                         parent.appendChild(node);
                         node.close = true;
                         node.parent = parent;
-                        node.siblingIndex = parent.size-1;
+                        node.siblingIndex = parent.size - 1;
                     }
                 }
 
@@ -338,6 +339,7 @@ public class HtmlNodeParse {
     // start标签开始 <的位置
     public static Node readTag(byte[] htmlBytes, long arrAddress, int start, int[] constructIndex, int constructPosition) {
         Node node = new Node();
+        node.rawHtml = htmlBytes;
         node.openStartIndex = start++;
         node.copenStartIndex = constructPosition - 1;
         int index = constructIndex[constructPosition++];
@@ -362,58 +364,68 @@ public class HtmlNodeParse {
         node.nameHash = UTF8ByteCharToLowerCaseHash(htmlBytes, arrAddress, start, nameBytes.length);
         node.name = nameBytes;
 
-        //读取等号 判断等号左侧是否的id  或者class ，否则的话先不解析直接跳过
+
+        int attrValueStart = 0;
+        int attrValueEnd = start - 3;
 
         while (!findEnd) {
+
+
             index = constructIndex[constructPosition++];
             //  c = htmlBytes[index];
             long attributeStart = ObjectAddress.getArrayData(arrAddress, index);
 
+            // <div id="center"d> 这个d会被丢弃
             if ((attributeStart & 0xFFL) != '>') {
+
                 //index1 字符串左侧   index2 字符串右侧
                 int index1 = index;
                 int index2 = constructIndex[constructPosition++];
                 boolean needValue = false;
-                //判断 index2指向字母还是=
-                if (htmlBytes[index2] == '=') { //大部分都走的这个分支
-                    index = index2;
-                    index2 = index2 - 1;
-                } else if (htmlBytes[index2] == '>') {
-                    //这个属性只有名称 没有值  可以丢弃
-                    index = index2;  //index 指向 >
-                    break;
-                } else {
-                    index = constructIndex[constructPosition++];
-                    if (htmlBytes[index] != '=') {
-                        //这个属性没有等号 =  ，所以index指向的是下一个属性的开始，或者闭合标签
-                        constructPosition--;
-                        continue;
+
+                //从第二个属性开始 ，可能存在<div id="center"dd="213"> d和前边的"或'连在一起
+                if (isAlpha(htmlBytes[attrValueEnd + 2])) {
+                    index2 = index;
+                    index1 = attrValueEnd + 2;
+                    attributeStart = ObjectAddress.getArrayData(arrAddress, index1);
+                    constructPosition--;
+                }
+
+                index = index2;
+
+                //假设index2指向= 所以先把index2减1
+                if (htmlBytes[index2--] != '=') {
+                    if (htmlBytes[++index2] == '>') {
+                        //这个属性只有名称 没有值  可以丢弃
+                        break;
+                    } else {
+                        index = constructIndex[constructPosition++];
+                        if (htmlBytes[index] != '=') {
+                            //这个属性没有等号 =  ，所以index指向的是下一个属性的开始，或者闭合标签
+                            constructPosition--;
+                            continue;
+                        }
                     }
                 }
-                int KeyLength = index2 - index1 + 1;
 
+                int KeyLength = index2 - index1 + 1;
                 long attributeLong = attributeStart;
 
                 //todo 这里改成匹配id href class三种属性，对于a标签，href需要和 target配置判断是否是绝对路径
                 //如果是 id 或者 class属性
-                if (KeyLength <= 8) {
+                if (KeyLength <= 5) {
                     int offset = (8 - KeyLength) << 3;
                     attributeLong = (attributeLong | 0x2020202020202020L) & (0xFFFFFFFFFFFFFFFFL >>> offset);
                     if (attributeLong == 0x7373616c63L || attributeLong == 0x6469L || attributeLong == 0x66657268L) {
                         needValue = true;
                     }
-                } else {
-                    //大于8字节的属性名，做压缩保存
-                    int loadCount = KeyLength >> 3;
-
                 }
 
 
                 //index指向=位置  ，  constructIndex[constructPosition] 现在指向=后第一个特征位置  可能是引号 可能是> 可能是字母
                 //判断等号右侧是不是 " ' 或者紧跟数字
                 byte eqNext = htmlBytes[index + 1];
-                int attrValueStart;
-                int attrValueEnd;
+
                 if (isWhiteSpace(eqNext)) {
                     //等号后下一个位置是空格，那么constructIndex中下一个位置一定是属性值开始位置的索引 或者 >
                     attrValueStart = constructIndex[constructPosition];
@@ -698,5 +710,4 @@ public class HtmlNodeParse {
         }
         return constructPosition;
     }
-
 }

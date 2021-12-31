@@ -6,7 +6,6 @@ import hsb.html.select.Evaluator;
 import hsb.html.select.StructuralEvaluator;
 import org.jsoup.helper.Validate;
 import org.jsoup.select.Selector;
-import us.codecraft.xsoup.XTokenQueue;
 
 
 import java.nio.charset.StandardCharsets;
@@ -245,7 +244,7 @@ public class XPathParser {
 
     private void byNth() {
         String nth = tq.chompBalanced('[', ']');
-        evals.add(new XEvaluators.IsNthOfType(0, Integer.parseInt(nth)));
+        evals.add(new Evaluator.IsNthOfType(0, Integer.parseInt(nth)));
     }
 
     private void consumeAttribute() {
@@ -330,7 +329,7 @@ public class XPathParser {
         Evaluator evaluator;
         if (cq.isEmpty()) {
             if ("*".equals(key)) {
-                evaluator = new XEvaluators.HasAnyAttribute();
+                evaluator = new Evaluator.HasAnyAttribute();
             } else {
                 int keyType = -1;
                 // 0 id ,1 class ,2 href

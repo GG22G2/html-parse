@@ -178,6 +178,19 @@ public abstract class Evaluator {
 
     }
 
+    public static class HasAnyAttribute extends Evaluator {
+
+        @Override
+        public boolean matches(Node root, Node element) {
+            if (element.id != null || element.allClass != null || element.hrefStart > 0) {
+                return true;
+            }
+            // element.attributeKIndex
+
+            return false;
+        }
+    }
+
     /**
      * Evaluator for attribute name prefix matching
      * todo 不能用
@@ -572,7 +585,6 @@ public abstract class Evaluator {
                 Node el = family[i];
                 if (EvaluatorHelp.equals(el.name, element.name)) pos++;
                 if (el == element) break;
-                ;
             }
             return pos;
         }

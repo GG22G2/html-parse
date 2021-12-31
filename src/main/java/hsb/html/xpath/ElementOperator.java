@@ -13,6 +13,7 @@ public abstract class ElementOperator {
 
     public abstract String operate(Node element);
 
+    //获取属性的值
     public static class AttributeGetter extends ElementOperator {
 
         private String attribute;
@@ -23,6 +24,15 @@ public abstract class ElementOperator {
 
         @Override
         public String operate(Node element) {
+            if ("href".equals(attribute)){
+                if (element.hrefStart>0){
+                    return new String(element.rawHtml,element.hrefStart,element.hrefEnd-element.hrefStart);
+                }
+            }else if ("id".equals(attribute)){
+                return new String(element.id);
+            }else if ("class".equals(attribute)){
+                return new String(element.allClass);
+            }
         //    return element.attr(attribute);
             return "";
         }

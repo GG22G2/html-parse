@@ -1,8 +1,15 @@
 package hsb.html.dom;
 
+import hsb.html.help.EvaluatorHelp;
+
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 public class Node {
+
+    public byte[] rawHtml;
 
     public Node parent;
 
@@ -56,7 +63,6 @@ public class Node {
     int cap = 4;
     public int size = 0;
 
-
     public Node() {
 
     }
@@ -68,13 +74,6 @@ public class Node {
         children[size++] = node;
     }
 
-/*    public void appendTextChild(Node node) {
-        if (size2 >= cap2) {
-            textChildExpandCapacity(cap1 + 1);
-        }
-        textChildren[size2++] = node;
-    }*/
-
     //只包含元素节点，非空节点或者文本节点都不包含
     public Node children(int index) {
         if (index < size) {
@@ -83,31 +82,104 @@ public class Node {
         return null;
     }
 
+
     /**
-     * 包含文本节点
-     * 结构如下： 两个文本节点之间是一个元素节点
-     * 文本
-     * 元素
-     * 文本
-     * 元素
-     * 文本
+     * 全部文本，不包括子元素中的
+     * <div>
+     *     1
+     *     <span>2</span>
+     *     3
+     *     <span>4</span>
+     *     5
+     * </div>
      * <p>
-     * 文本节点包括  空内容  字符串   或者是注释，   html实际把注释当作一个单独节点  ，但是为了方便，注释和文本合二为一了
+     * 返回 135
      */
-    public Node childNodes(int index) {
-        Node n;
-        int a = index & 0x1;
-        index = index >> 1;
-        if (a == 0) { //偶数
-            //   n = textChildren[index];
-            //todo 如果是chrome，这里代表文本标签
-            n = null;
-        } else { //奇数
-            n = children[index];
+    public String ownText() {
+        if (rawHtml != null && closeStartIndex > openEndIndex) {
+            int byteLength = 0;
+            int strIndex[] = new int[(size + 1) * 2];
+            for (int i = 0, j = 0; i <= size; i++) {
+                int start = i == 0 ? openEndIndex + 1 : children[i - 1].closeEndIndex + 1;
+                int end = i == size ? closeStartIndex - 1 : children[i].openStartIndex - 1;
+                int len = end - start + 1;
+                len = len > 0 ? len : 0;
+                strIndex[j++] = start;
+                strIndex[j++] = len;
+                byteLength += len;
+            }
+            byte[] strBytes = new byte[byteLength];
+            int position = 0;
+            for (int i = 0; i < strIndex.length; i += 2) {
+                int len = strIndex[i + 1];
+                System.arraycopy(rawHtml, strIndex[i], strBytes, position, len);
+                position += len;
+            }
+            //utf8编码
+            return new String(strBytes);
         }
-        return n;
+        return "";
     }
 
+    /**
+     * 同ownText()中注释例子:
+     * <p>
+     * 返回 ["1","3","5"];
+     */
+    public List<String> ownTextNodes() {
+        if (rawHtml != null && closeStartIndex > openEndIndex) {
+            //utf8编码
+            ArrayList<String> strs = new ArrayList<String>(size + 1);
+            for (int i = 0; i <= size; i++) {
+                int start = i == 0 ? openEndIndex + 1 : children[i - 1].closeEndIndex + 1;
+                int end = i == size ? closeStartIndex - 1 : children[i].openStartIndex - 1;
+                int len = end - start + 1;
+                len = len > 0 ? len : 0;
+                if (len == 0) {
+                    strs.add("");
+                } else {
+                    strs.add(new String(rawHtml, start, len));
+                }
+            }
+            return strs;
+        }
+        return new ArrayList<>(0);
+    }
+
+
+    /**
+     * <div>
+     *     1
+     *     <span>2</span>
+     *     3
+     *     <span>4</span>
+     *     5
+     * </div>
+     * <p>
+     * 返回 12345
+     */
+    public String text() {
+        //todo 待做
+        return "";
+    }
+
+    /**
+     * 同ownText()中注释例子:
+     * <p>
+     * 返回 ["1","2","3","4","5"];
+     */
+    public String textNodes() {
+        //todo 待做
+        return "";
+    }
+
+    public String html() {
+        if (rawHtml != null) {
+            //utf8编码
+            return new String(rawHtml, openStartIndex, closeEndIndex - openStartIndex + 1);
+        }
+        return "";
+    }
 
     public void ChildExpandCapacity(int newCap) {
         Node[] n = new Node[newCap];
@@ -116,13 +188,19 @@ public class Node {
         cap = newCap;
     }
 
-/*    public void textChildExpandCapacity(int newCap) {
-        Node[] n = new Node[newCap];
-        System.arraycopy(textChildren, 0, n, 0, textChildren.length);
-        textChildren = n;
-        cap2 = newCap;
-    }*/
 
+    public String attr(String key) {
+
+        byte[] bytes = key.getBytes(StandardCharsets.UTF_8);
+
+        //
+        for (int i = openStartIndex + name.length + 1; i < openEndIndex; i++) {
+
+
+        }
+
+        return "";
+    }
 
     @Override
     public String toString() {
@@ -130,7 +208,7 @@ public class Node {
                 ", name=" + (name != null ? new String(name) : "") +
                 ", id=" + (id != null ? new String(id) : "") +
                 ", allClass=" + (allClass != null ? new String(allClass) : "") +
-                "openStartIndex=" + openStartIndex +
+                ", openStartIndex=" + openStartIndex +
                 ", openEndIndex=" + openEndIndex +
                 ", closeStartIndex=" + closeStartIndex +
                 ", closeEndIndex=" + closeEndIndex +
