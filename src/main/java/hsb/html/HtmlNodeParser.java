@@ -5,7 +5,10 @@ import hsb.html.help.ObjectAddress;
 
 import java.nio.charset.StandardCharsets;
 
-public class HtmlNodeParse {
+public class HtmlNodeParser {
+    //创建一个512000大小的栈，用于纪录元素数量 ,可以方便后续遍历操作
+    public Node[] nodes = new Node[1024 * 1024];
+    public int nodesPosition = 0;
 
     //可以是单标签，也可以是双标签的元素,这个主要放这里便与查阅
     static final String[] NoMustSingleTag = new String[]{"colgroup"};
@@ -69,29 +72,27 @@ public class HtmlNodeParse {
      * jsoup   1线程1   3线程2.4   6线程3.7
      * 1线程时，比jsoup快8倍  6线程比jsoup快4倍
      */
-    public static Node parse(byte[] htmlBytes, int[] constructIndex) {
-
+    public Node parse(byte[] htmlBytes, int[] constructIndex) {
+        nodesPosition = 0;
         Node root = new Node();
         root.rawHtml = htmlBytes;
         root.name = "#root".getBytes(StandardCharsets.UTF_8);
         root.nameHash = tagNameByteToLong(root.name);
+        nodes[nodesPosition++] = root;
         //默认最大栈不会大于256 , 大于的话再说吧
-        Node[] stack = new Node[256];
+        Node[] stack = new Node[512];
         stack[0] = root;
         int stackTop = 0;
         long arrAddress = ObjectAddress.addressOf(htmlBytes);
-        //Node topNode = root;
-        int start = 0;
+
         int constructPosition = 1;
-        int textStart;
-        boolean findTextEnd = false;
+
 
         int cLength = constructIndex[0];
         while (constructPosition < cLength) {
             int index = constructIndex[constructPosition++];
             byte c = htmlBytes[index];
 
-            textStart = start;
             if (c == '<') {
                 byte next = htmlBytes[index + 1];
                 if (next == '!') {
@@ -105,9 +106,7 @@ public class HtmlNodeParse {
                         //获取<!DOCTYPE html>标签，是否有可能是内嵌文档，文档里嵌文档? 暂时先按照丢弃处理
                         Node node = readTag(htmlBytes, arrAddress, index + 1, constructIndex, constructPosition);
                         constructPosition = node.copenEndIndex;
-                        start = constructIndex[constructPosition] + 1;
                         constructPosition++;
-                        findTextEnd = true;
                     }
                 } else if (next == '/') {
                     /*
@@ -124,7 +123,6 @@ public class HtmlNodeParse {
 
                     if (htmlBytes[tagNameEndIndex] == '>') {
                         tagEndIndex = tagNameEndIndex;
-                        start = tagNameEndIndex + 1;
                         //这个if分支是为了处理  </br/> 这样的结构
                         if (htmlBytes[tagNameEndIndex - 1] == '/') {
                             tagNameEndIndex--;
@@ -132,11 +130,9 @@ public class HtmlNodeParse {
                         tagNameEndIndex--;
                     } else {
                         tagEndIndex = constructIndex[constructPosition++];
-                        start = tagEndIndex + 1;
                     }
                     int t = index + 2;
                     //遇到闭合标签，因次应该更新dom结构树
-                    findTextEnd = true;
                     int nameLen = tagNameEndIndex - t + 1;
                     long lowNameHash = UTF8ByteCharToLowerCaseHash(htmlBytes, arrAddress, t, nameLen);
                     stackTop = closeTag(stack, stackTop, lowNameHash, nameLen, index, tagEndIndex);
@@ -148,33 +144,17 @@ public class HtmlNodeParse {
                     //else if (alphaTable[next]) {
                     //跳转到标签开始
                     Node node = readTag(htmlBytes, arrAddress, index, constructIndex, constructPosition);
+
+                    //script和textarea标签都有个特点，就是如果遇到</script>  </script >  </textarea> </textarea > 就一定代表闭合了.而且这几种文本标签都是不允许自闭和的，需要忽略
                     boolean isTextTag = isTextTag(node.nameHash);
                     constructPosition = node.copenEndIndex; // constructPosition指向>
-                    findTextEnd = true;
-                    //更新start位置
-                    start = constructIndex[constructPosition] + 1;
-                    stackTop = addNode(stack, stackTop, node);
                     constructPosition++;
-
-                    //script和textarea标签都有个特点，就是如果遇到</script>  </script >  </textarea> </textarea >，就一定代表闭合了.
-                    //这几种文本标签都是不允许自闭和的，需要忽略
                     if (isTextTag) {
                         constructPosition = consumeText(htmlBytes, constructIndex, constructPosition, node);
-                        Node parent = stack[--stackTop];
-                        parent.appendChild(node);
-                        node.close = true;
-                        node.parent = parent;
-                        node.siblingIndex = parent.size - 1;
                     }
+                    stackTop = addNode(stack, stackTop, node, isTextTag);
                 }
 
-                if (findTextEnd) {
-                    //判断开始标签和 start之间是否有字符
-                    if (index > textStart) { //当作文本标签处理
-                        // todo 给node节点加上节点开始和节点结束索引， 后边实际需要获取文本时，根据前后节点的信息，推断文本快位置
-                    }
-                    findTextEnd = false;
-                }
             } else {//找到下一个开始标签或闭合标签 < ，然后把中间的数据当作字符处理
                 int strEnd;
                 while (constructPosition < cLength) {
@@ -188,79 +168,112 @@ public class HtmlNodeParse {
             }
 
         }
+
+        if(stackTop==1){
+            Node top = stack[stackTop];
+            root.size = top.siblingIndex+1;
+
+        }
+
         return root;
     }
 
 
-    public static int addNode(Node[] stack, int stackTop, Node node) {
+    public int addNode(Node[] stack, int stackTop, Node node, boolean close) {
+        nodes[nodesPosition++] = node;
+        //如果添加的是一个闭合标签，直接放入放入栈顶元素的子节点中
+        if (close) {
+            stack[++stackTop] = node;
+            stackTop = closeStackTopNode(stack, stackTop, node);
+            return stackTop;
+        }
+
         //判断是不是空标签
         if (node.selfClose || isEmptyTagName(node.nameHash, node.name.length)) { //如果是空标签当作闭合处理
             int openEndIndex = node.openEndIndex;
             node.closeStartIndex = openEndIndex;
             node.closeEndIndex = openEndIndex;
-            Node topNode = stack[stackTop];
-            topNode.appendChild(node);
-            node.parent = topNode;
-            node.siblingIndex = topNode.size - 1;
 
+            stack[++stackTop] = node;
+            stackTop = closeStackTopNode(stack, stackTop, node);
         } else { //非空标签，放入栈中
             stack[++stackTop] = node;
         }
         return stackTop;
     }
 
+    public int closeStackTopNode(Node[] stack, int stackTop, Node cur) {
+        Node previousNode = stack[stackTop - 1];
+        if (previousNode.parent == null) { //当作第一个子元素处理
+            cur.parent = previousNode;
+            cur.close = true;
+            cur.siblingIndex = 0;
+            previousNode.firstChild = cur;
+        } else {
+            cur.parent = previousNode.parent;
+            cur.preSiblingNode = previousNode;
+            cur.close = true;
+            cur.siblingIndex = previousNode.siblingIndex + 1;
+            previousNode.nextSiblingNode = cur;
+            stack[--stackTop] = cur;
+        }
+        return stackTop;
+    }
+
+
     /**
-     * 标签闭合， 并且考虑标签不配对情况，
+     * 标签闭合，
+     * <p>
+     * 如果把Node改成 不保存子元素， 只保存父节点，以及同层级相邻的上和下节点  （或者再加上第一个子元素？？？）
+     * <p>
+     * 因为需要连接同级的上和下节点，所以当一个标签闭合后，并不是直接退栈，而是等到下一个同级元素闭合或父元素闭合时再退栈
+     * 所以栈顶第二个素可能是同级的上一个元素，或者是父元素。
+     * <p>
+     * 取栈顶元素：
+     * 如果栈顶元素是闭合的，代表是栈顶第二个元素(父元素)要闭合了。清除当前栈顶元素，以及判断第二个元素是第一个子节点在闭合，还是后续子节点在闭合
+     * 否则取栈顶第二个素：(判断是某个节点的第一个子节点在闭合，还是后续子节点在闭合)
+     * 元素的parent属性为null，是父元素。parent属性不为null，是同级的上一个元素
      * <p>
      * <p>
-     * todo  name是标签名称， 因为一般标签的字节长度是 1 -  5 ，完全可以用一个long类型标签，这样比较的时候也能减少比较次数
-     * todo  对是byte[] 映射到long类型的算法  目前想到的是字母只有低7位有效，通过或运算，左移7位，一个long类型可以包含9个字节的信息。一般标签都不会出现重复值
+     * 也就是先判断是栈顶要闭合还是栈顶第二个元素要闭合
+     * <p>
+     * 不管是栈中第几个元素在闭合，都看其前一个元素的父节点是否存在。存在，则代表该元素在同级中不是第一个，否则是同级中第一个元素。
+     * 另外就是，如果是栈中第二个元素闭合，要考虑把栈顶保存一下。
      */
-    public static int closeTag(Node[] stack, int stackTop, long nameHash, int nameLen, int closeStartIndex, int closeEndIndex) {
+    public int closeTag(Node[] stack, int stackTop, long nameHash, int nameLen, int closeStartIndex, int closeEndIndex) {
         if (isEmptyTagName(nameHash, nameLen)) {  //空标签的闭合标签直接丢弃处理
             if (nameLen == 2) { //空标签中只有br的长度是2
                 Node brNode = new Node();
-                brNode.close = true;
+
                 brNode.openStartIndex = closeStartIndex;
                 brNode.openEndIndex = closeEndIndex;
                 brNode.closeStartIndex = closeEndIndex;
                 brNode.closeEndIndex = closeEndIndex;
-                //br标签比较特殊，当作一个标签处理
-                Node topNode = stack[stackTop];
-                topNode.appendChild(brNode);
-                brNode.parent = topNode;
-                brNode.siblingIndex = topNode.size - 1;
+
+                stack[++stackTop] = brNode;
+                stackTop = closeStackTopNode(stack, stackTop, brNode);
+                nodes[nodesPosition++] = brNode;
             }
             return stackTop;
         }
 
+
         Node node = stack[stackTop];
+
+        if (node.close) { //栈顶是闭合的，说明是一个又子元素的标签，
+            Node t = stack[--stackTop];
+            t.size = node.siblingIndex + 1;
+            node = t;
+        }
         boolean nameEq = (node.nameHash == nameHash);
+
         if (nameEq) {
-            Node parent = stack[--stackTop];
-            parent.appendChild(node);
-            node.close = true;
             node.closeStartIndex = closeStartIndex;
             node.closeEndIndex = closeEndIndex;
-            node.parent = parent;
-            node.siblingIndex = parent.size - 1;
+            stackTop = closeStackTopNode(stack, stackTop, node);
         } else {
-            System.out.println("标签不配对");
-            /*
-              对于可以省略闭合标签的情况，这里可以通过移动元素来解决
-              把当前Node节点放入stack[--stackTop]中， 把Node中元素移入stack[--stackTop]中。
-              但是移动时，并不一定是全移动，以 table  colgroup  col tb
-
-              比如 table中包含colgroup ， 可能缺少闭合的colgroup标签，但chrome会在col结尾 插入 </colgroup>
-
-              现在程序执行到这里可能是： colgroup中包含col 和tb , 那么应该把tb放入table中， col保留在colgroup中
-              但这些都要根据具体的标签名称来判断，需要大量代码，
-              */
-            //todo 现在把所有可省略闭合标签等同于一定省略闭合标签来处理了，可能会导致局部的dom结构和浏览器解析出来的结构不一致
-            Node parent = stack[--stackTop];
-            parent.appendChild(node);
-            node.parent = parent;
-            node.siblingIndex = parent.size - 1;
+            System.out.println("标签不配对，补充闭合标签");
+            stackTop = closeStackTopNode(stack, stackTop, node);
             stackTop = closeTag(stack, stackTop, nameHash, nameLen, closeStartIndex, closeEndIndex);
         }
         return stackTop;
@@ -268,7 +281,7 @@ public class HtmlNodeParse {
 
 
     public static boolean isEmptyTagName(byte[] name) {
-        int[] index = HtmlNodeParse.tagNameLengthIndex[name.length];
+        int[] index = HtmlNodeParser.tagNameLengthIndex[name.length];
         int tagStart = index[0];
         int tagEnd = index[1];
         //判断是不是空标签,如果是空标签当作闭合处理
@@ -283,8 +296,8 @@ public class HtmlNodeParse {
 
 
     public static boolean isEmptyTagName(long nameHash, int nameLen) {
-        int[] index = HtmlNodeParse.tagNameLengthIndex[nameLen];
-        long[] emptyTagNameHash = HtmlNodeParse.emptyTagNameHash;
+        int[] index = HtmlNodeParser.tagNameLengthIndex[nameLen];
+        long[] emptyTagNameHash = HtmlNodeParser.emptyTagNameHash;
         int tagStart = index[0];
         int tagEnd = index[1];
         //判断是不是空标签,如果是空标签当作闭合处理
@@ -298,7 +311,7 @@ public class HtmlNodeParse {
 
     public static boolean isEmptyTagName(byte[] name, int start, int length) {
         //emptyTagName中字节数组是有序的，可以根据长度跳过一部分
-        int[] index = HtmlNodeParse.tagNameLengthIndex[length];
+        int[] index = HtmlNodeParser.tagNameLengthIndex[length];
         int tagStart = index[0];
         int tagEnd = index[1];
 
@@ -654,7 +667,7 @@ public class HtmlNodeParse {
 
     public static boolean isTextTag(long nameHash) {
         //todo  textTagHash只有四种值，不如当成立即数
-        long[] textTagHash = HtmlNodeParse.textTagHash;
+        long[] textTagHash = HtmlNodeParser.textTagHash;
         for (long tagHash : textTagHash) {
             if (nameHash == tagHash) {
                 return true;

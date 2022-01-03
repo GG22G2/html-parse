@@ -15,7 +15,7 @@ public interface XPathEvaluator {
 
     Node findFirst(Node element);
 
-    List<Node> findTag(Node element,String tagName);
+    List<Node> findAll(Node element, Node[] nodes, int length);
 
 
     boolean hasAttribute();

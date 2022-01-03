@@ -5,9 +5,6 @@ import hsb.html.select.CombiningEvaluator;
 import hsb.html.select.Evaluator;
 import hsb.html.select.StructuralEvaluator;
 import org.jsoup.helper.Validate;
-import org.jsoup.select.Selector;
-
-
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.regex.Matcher;
@@ -181,7 +178,8 @@ public class XPathParser {
             evals.add(consumePredicates(tq.chompBalanced('[', ']')));
         } else {
             // unhandled
-            throw new Selector.SelectorParseException("Could not parse query '%s': unexpected token at '%s'", query, tq.remainder());
+            //throw new Selector.SelectorParseException("Could not parse query '%s': unexpected token at '%s'", query, tq.remainder());
+            throw new IllegalStateException("Could not parse query '"+query+"': unexpected token at '"+tq.remainder()+"'");
         }
     }
 
@@ -207,7 +205,8 @@ public class XPathParser {
                 } else if (predicatesQueue.matchesRegex("\\w+.*")) {
                     evaluator = byFunction(predicatesQueue);
                 } else {
-                    throw new Selector.SelectorParseException("Could not parse query '%s': unexpected token at '%s'", query, predicatesQueue.remainder());
+                 //   throw new Selector.SelectorParseException("Could not parse query '%s': unexpected token at '%s'", query, predicatesQueue.remainder());
+                    throw new IllegalStateException("Could not parse query '"+query+"': unexpected token at '"+predicatesQueue.remainder()+"'");
                 }
                 evaluatorStack.calc(evaluator, currentOperation);
                 //consume operator
@@ -234,7 +233,8 @@ public class XPathParser {
             }
         }
 
-        throw new Selector.SelectorParseException("Could not parse query '%s': unexpected token at '%s'", query, predicatesQueue.remainder());
+       // throw new Selector.SelectorParseException("Could not parse query '%s': unexpected token at '%s'", query, predicatesQueue.remainder());
+        throw new IllegalStateException("Could not parse query '"+query+"': unexpected token at '"+predicatesQueue.remainder()+"'");
     }
 
     private void allElements() {
@@ -292,7 +292,8 @@ public class XPathParser {
             elementOperator =
                     new ElementOperator.Regex(params.get(1), params.get(0).substring(1), Integer.parseInt(params.get(2)));
         } else {
-            throw new Selector.SelectorParseException("Unknown usage for regex()" + remainder);
+          //  throw new Selector.SelectorParseException("Unknown usage for regex()" + remainder);
+            throw new IllegalStateException("Unknown usage for regex()"+remainder);
         }
     }
 
@@ -374,7 +375,8 @@ public class XPathParser {
                 evaluator =
                         new Evaluator.AttributeWithValueMatching(key, Pattern.compile(XTokenQueue.trimQuotes(chompEqualValue(cq))));
             } else {
-                throw new Selector.SelectorParseException("Could not parse attribute query '%s': unexpected token at '%s'", query, chompEqualValue(cq));
+               // throw new Selector.SelectorParseException("Could not parse attribute query '%s': unexpected token at '%s'", query, chompEqualValue(cq));
+                throw new IllegalStateException("Could not parse attribute query '"+query+"': unexpected token at '"+chompEqualValue(cq)+"'");
             }
         }
         return evaluator;

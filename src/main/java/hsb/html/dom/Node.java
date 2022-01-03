@@ -12,8 +12,12 @@ public class Node {
     public byte[] rawHtml;
 
     public Node parent;
+    public Node preSiblingNode;
+    public Node nextSiblingNode;
+    public Node firstChild = null;
 
-    public Node[] children = new Node[4];
+    // public Node[] children = null;// new Node[4];
+
     //Node[] textChildren = new Node[5];
 
     //使用四个变量记录节点在原文中定位，方便提取字符串等操作. <div  id ='a' class='f' >
@@ -27,7 +31,7 @@ public class Node {
     public int copenStartIndex;
     public int copenEndIndex;
 
-    public int siblingIndex;
+
     //标签名称
     public byte[] name;
 
@@ -49,8 +53,11 @@ public class Node {
     //是否自闭合 只有在解析标签是遇到/> 这个值才可能是true ，之所以不是一定,是因为如<div id = fee/>，这个"fee/"都被当作id的值,chrome也是这么处理的
     //但实际上是否被当作自闭合，好像有严格限制，比如div就不允许自闭合，<div/>也会被认为是开始标签
     public boolean selfClose = false;
+
     //代表标签闭合，用在程序中标记一个node节点处理完成
     public boolean close = false;
+
+    public int siblingIndex;
 
     //todo 除了id class href之外的属性如何处理
     //属性的名字，除了id class href，其他属性很少被用来做xpath选择器的元素。所以都放这里
@@ -67,20 +74,20 @@ public class Node {
 
     }
 
-    public void appendChild(Node node) {
-        if (size >= cap) {
-            ChildExpandCapacity(cap << 1);
-        }
-        children[size++] = node;
-    }
+//    public void appendChild(Node node) {
+//        if (size >= cap) {
+//            ChildExpandCapacity(cap << 1);
+//        }
+//        children[size++] = node;
+//    }
 
     //只包含元素节点，非空节点或者文本节点都不包含
-    public Node children(int index) {
-        if (index < size) {
-            return children[index];
-        }
-        return null;
-    }
+//    public Node children(int index) {
+//        if (index < size) {
+//            return children[index];
+//        }
+//        return null;
+//    }
 
 
     /**
@@ -98,21 +105,43 @@ public class Node {
     public String ownText() {
         if (rawHtml != null && closeStartIndex > openEndIndex) {
             int byteLength = 0;
-            int strIndex[] = new int[(size + 1) * 2];
-            for (int i = 0, j = 0; i <= size; i++) {
-                int start = i == 0 ? openEndIndex + 1 : children[i - 1].closeEndIndex + 1;
-                int end = i == size ? closeStartIndex - 1 : children[i].openStartIndex - 1;
-                int len = end - start + 1;
+            int le = (size + 1) * 2;
+            int strIndex[] = new int[le];
+
+
+            Node child = firstChild;
+//            for (int i = 1; i < (le - 1); i += 2) {
+//                strIndex[i] = child.openStartIndex;
+//                strIndex[i + 1] = child.closeEndIndex;
+//                child = child.nextSiblingNode;
+//            }
+
+            int nextStart = openEndIndex + 1;
+            int len;
+            for (int i = 0, j = 0; i < size; i++) {
+                int start = nextStart;
+                int end = child.openStartIndex - 1;
+                nextStart = child.closeEndIndex + 1;
+                len = end - start + 1;
                 len = len > 0 ? len : 0;
+
                 strIndex[j++] = start;
                 strIndex[j++] = len;
                 byteLength += len;
+                child = child.nextSiblingNode;
             }
+            len = closeStartIndex - nextStart;
+            len = len > 0 ? len : 0;
+            strIndex[le - 2] = nextStart;
+            strIndex[le - 1] = len;
+            byteLength += len;
+
             byte[] strBytes = new byte[byteLength];
             int position = 0;
             for (int i = 0; i < strIndex.length; i += 2) {
-                int len = strIndex[i + 1];
-                System.arraycopy(rawHtml, strIndex[i], strBytes, position, len);
+                int start = strIndex[i];
+                len = strIndex[i + 1];
+                System.arraycopy(rawHtml, start, strBytes, position, len);
                 position += len;
             }
             //utf8编码
@@ -130,16 +159,28 @@ public class Node {
         if (rawHtml != null && closeStartIndex > openEndIndex) {
             //utf8编码
             ArrayList<String> strs = new ArrayList<String>(size + 1);
-            for (int i = 0; i <= size; i++) {
-                int start = i == 0 ? openEndIndex + 1 : children[i - 1].closeEndIndex + 1;
-                int end = i == size ? closeStartIndex - 1 : children[i].openStartIndex - 1;
-                int len = end - start + 1;
+            Node child = firstChild;
+            int nextStart = openEndIndex + 1;
+            int len;
+            for (int i = 0; i < size; i++) {
+                int start = nextStart;
+                int end = child.openStartIndex - 1;
+                nextStart = child.closeEndIndex + 1;
+                len = end - start + 1;
                 len = len > 0 ? len : 0;
                 if (len == 0) {
                     strs.add("");
                 } else {
                     strs.add(new String(rawHtml, start, len));
                 }
+                child = child.nextSiblingNode;
+            }
+            len = closeStartIndex - nextStart + 1;
+            len = len > 0 ? len : 0;
+            if (len == 0) {
+                strs.add("");
+            } else {
+                strs.add(new String(rawHtml, nextStart, len));
             }
             return strs;
         }
@@ -181,12 +222,12 @@ public class Node {
         return "";
     }
 
-    public void ChildExpandCapacity(int newCap) {
-        Node[] n = new Node[newCap];
-        System.arraycopy(children, 0, n, 0, children.length);
-        children = n;
-        cap = newCap;
-    }
+//    public void ChildExpandCapacity(int newCap) {
+//        Node[] n = new Node[newCap];
+//        System.arraycopy(children, 0, n, 0, children.length);
+//        children = n;
+//        cap = newCap;
+//    }
 
 
     public String attr(String key) {

@@ -1,6 +1,6 @@
 package hsb.html.select;
 
-import hsb.html.HtmlNodeParse;
+import hsb.html.HtmlNodeParser;
 import hsb.html.dom.Node;
 import hsb.html.help.EvaluatorHelp;
 import org.jsoup.helper.Validate;
@@ -37,7 +37,7 @@ public abstract class Evaluator {
 
         public Tag(byte[] tagName) {
             this.tagName = tagName;
-            tagNameHash = HtmlNodeParse.tagNameByteToLong(tagName);
+            tagNameHash = HtmlNodeParser.tagNameByteToLong(tagName);
         }
 
         @Override
@@ -61,7 +61,7 @@ public abstract class Evaluator {
 
         public TagEndsWith(byte[] tagName) {
             this.tagName = tagName;
-            tagNameHash = HtmlNodeParse.tagNameByteToLong(tagName);
+            tagNameHash = HtmlNodeParser.tagNameByteToLong(tagName);
         }
 
         @Override
@@ -503,7 +503,7 @@ public abstract class Evaluator {
         @Override
         public boolean matches(Node root, Node element) {
             final Node p = element.parent;
-            if (p == null) return false;
+            if (p == null || p.size < b) return false;
 
             final int pos = calculatePosition(root, element);
             if (a == 0) return pos == b;
@@ -578,14 +578,13 @@ public abstract class Evaluator {
 
         protected int calculatePosition(Node root, Node element) {
             int pos = 0;
-            Node[] family = element.parent.children;
-            int size = element.parent.size;
-
-            for (int i = 0; i < size; i++) {
-                Node el = family[i];
+            Node el = element;
+            do {
                 if (EvaluatorHelp.equals(el.name, element.name)) pos++;
-                if (el == element) break;
-            }
+                el = el.preSiblingNode;
+            } while (el != null);
+
+
             return pos;
         }
 
@@ -604,12 +603,17 @@ public abstract class Evaluator {
         @Override
         protected int calculatePosition(Node root, Node element) {
             int pos = 0;
-            Node[] family = element.parent.children;
-            int size = element.parent.size;
-            for (int i = EvaluatorHelp.siblingIndex(root, element); i < size; i++) {
-                Node el = family[i];
+//            Node[] family = element.parent.children;
+//            int size = element.parent.size;
+//            for (int i = EvaluatorHelp.siblingIndex(root, element); i < size; i++) {
+//                Node el = family[i];
+//                if (EvaluatorHelp.equals(el.name, element.name)) pos++;
+//            }
+            Node el = element;
+            do {
                 if (EvaluatorHelp.equals(el.name, element.name)) pos++;
-            }
+                el = el.nextSiblingNode;
+            } while (el != null);
             return pos;
         }
 
@@ -671,13 +675,13 @@ public abstract class Evaluator {
             final Node p = element.parent;
             if (p == null) return false;
             int pos = 0;
-            Node[] family = p.children;
-            int size = p.size;
 
-            for (int i = 0; i < size; i++) {
-                Node el = family[i];
+            Node el = element.parent.firstChild;
+            do {
                 if (EvaluatorHelp.equals(el.name, element.name)) pos++;
-            }
+                el = el.nextSiblingNode;
+            } while (el != null);
+
             return pos == 1;
         }
 

@@ -37,7 +37,7 @@ public class EvaluatorHelp {
     }
 
     public static boolean equals(byte[] b1, byte[] b2) {
-        if (b1==null||b2==null) return false;
+        if (b1 == null || b2 == null) return false;
         if (b1.length != b2.length) {
             return false;
         }
@@ -73,14 +73,15 @@ public class EvaluatorHelp {
 
     public static int siblingIndex(Node root, Node element) {
         if (element != root) {
-            Node parent = element.parent;
-            Node[] children = parent.children;
-            int length = parent.size;
-            for (int i = 0; i < length; i++) {
-                if (children[i] == element) {
-                    return i;
-                }
-            }
+//            Node parent = element.parent;
+//            Node[] children = parent.children;
+//            int length = parent.size;
+//            for (int i = 0; i < length; i++) {
+//                if (children[i] == element) {
+//                    return i;
+//                }
+//            }
+            return element.siblingIndex;
         }
         return 0;
     }
@@ -88,18 +89,18 @@ public class EvaluatorHelp {
 
     public static int previousElementSibling(Node root, Node element) {
         if (element != root) {
-            Node parent = element.parent;
-            Node[] children = parent.children;
-            int length = parent.size;
-            for (int i = 0; i < length; i++) {
-                if (children[i] == element) {
-                    return i;
-                }
-            }
+//            Node parent = element.parent;
+//            Node[] children = parent.children;
+//            int length = parent.size;
+//            for (int i = 0; i < length; i++) {
+//                if (children[i] == element) {
+//                    return i;
+//                }
+//            }
+            return element.siblingIndex - 1;
         }
         return 0;
     }
-
 
 
 }

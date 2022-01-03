@@ -1,7 +1,6 @@
 package hsb.html.xpath;
 
 
-
 import hsb.html.dom.Node;
 
 import java.util.ArrayList;
@@ -38,7 +37,7 @@ public class CombingXPathEvaluator implements XPathEvaluator {
     }
 
     @Override
-    public List<Node> findTag(Node element, String tagName) {
+    public List<Node> findAll(Node element, Node[] nodes, int length) {
         return null;
     }
 

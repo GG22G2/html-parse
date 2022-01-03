@@ -32,12 +32,33 @@ public class Collector {
         return elements;
     }
 
-    private static class Accumulator implements NodeVisitor {
+    public static class ArrayFilter{
         private final Node root;
         private final List<Node> elements;
         private final Evaluator eval;
 
-        Accumulator(Node root, List<Node> elements, Evaluator eval) {
+        public ArrayFilter(Node root, List<Node> elements, Evaluator eval) {
+            this.root = root;
+            this.elements = elements;
+            this.eval = eval;
+        }
+
+        public void head(Node node, int depth) {
+            if (eval.matches(root, node))
+                elements.add(node);
+        }
+
+    }
+
+
+
+
+    public static class Accumulator implements NodeVisitor {
+        private final Node root;
+        private final List<Node> elements;
+        private final Evaluator eval;
+
+       public Accumulator(Node root, List<Node> elements, Evaluator eval) {
             this.root = root;
             this.elements = elements;
             this.eval = eval;
@@ -61,7 +82,7 @@ public class Collector {
         return finder.match;
     }
 
-    private static class FirstFinder implements NodeFilter {
+    public static class FirstFinder implements NodeFilter {
         private final Node root;
         private Node match = null;
         private final Evaluator eval;

@@ -5,9 +5,7 @@ import hsb.html.dom.Node;
 import hsb.html.select.Collector;
 import hsb.html.select.Evaluator;
 import hsb.html.select.NodeTraversor;
-import us.codecraft.xsoup.XElements;
 
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -48,10 +46,10 @@ public class DefaultXPathEvaluator implements XPathEvaluator {
     }
 
     @Override
-    public List<Node> findTag(Node element, String tagName) {
-        Evaluator.Tag tagFilter = new Evaluator.Tag(tagName.getBytes(StandardCharsets.UTF_8));
+    public List<Node> findAll(Node element, Node[] nodes, int length) {
         List result = new ArrayList();
-        NodeTraversor.filterSingleEvaluator( element,tagFilter,result);
+        Collector.Accumulator filter = new Collector.Accumulator(element, result, evaluator);
+        NodeTraversor.traverseNodeArray(filter, element, nodes, length);
         return result;
     }
 

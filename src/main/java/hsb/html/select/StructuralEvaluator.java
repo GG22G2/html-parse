@@ -106,13 +106,11 @@ public abstract class StructuralEvaluator extends Evaluator {
             if (root == element)
                 return false;
 
-            Node[] family = element.parent.children;
-            int curIndex = EvaluatorHelp.siblingIndex(root, element);
-
-            for (int i = curIndex - 1; i >= 0; i--) {
-                Node prev = family[i];
-                if (evaluator.matches(root, prev))
+            Node el = element.preSiblingNode;
+            while (el != null) {
+                if (evaluator.matches(root, el))
                     return true;
+                el = el.preSiblingNode;
             }
             return false;
         }
@@ -131,12 +129,7 @@ public abstract class StructuralEvaluator extends Evaluator {
         public boolean matches(Node root, Node element) {
             if (root == element)
                 return false;
-            Node[] family = element.parent.children;
-            int curIndex = EvaluatorHelp.siblingIndex(root, element);
-            Node prev = null;
-            if (curIndex > 0) {
-                prev = family[curIndex - 1];
-            }
+            Node prev = element.preSiblingNode;
             return prev != null && evaluator.matches(root, prev);
         }
 
