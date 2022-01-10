@@ -1,9 +1,7 @@
 package hsb.html.select;
 
 import hsb.html.dom.Node;
-import org.jsoup.helper.Validate;
-
-import java.util.HashSet;
+import hsb.html.help.Validate;
 import java.util.List;
 
 import static hsb.html.select.NodeFilter.*;
@@ -26,7 +24,6 @@ public class NodeTraversor {
         Node node = root;
         int depth = 0;
         int t = 0;
-        HashSet set = new HashSet();
         while (node != root || t++ == 0) {
             visitor.head(node, depth);
             if (node.size > 0) {

@@ -5,10 +5,11 @@ import hsb.html.help.ObjectAddress;
 
 import java.nio.charset.StandardCharsets;
 
+/**
+ * html解析
+ * 线程不安全
+ */
 public class HtmlNodeParser {
-    //创建一个512000大小的栈，用于纪录元素数量 ,可以方便后续遍历操作
-    public Node[] nodes = new Node[1024 * 1024];
-    public int nodesPosition = 0;
 
     //可以是单标签，也可以是双标签的元素,这个主要放这里便与查阅
     static final String[] NoMustSingleTag = new String[]{"colgroup"};
@@ -27,9 +28,9 @@ public class HtmlNodeParser {
     static final long[] emptyTagNameHash = new long[emptyTagNameStr.length];
 
     //用于字母大写转小写的表
-    public static byte[] alphaConvertTable = new byte[256];
+    private static byte[] alphaConvertTable = new byte[256];
     //用于判读是不是字母
-    public static boolean[] alphaTable = new boolean[256];
+    private static boolean[] alphaTable = new boolean[256];
 
     static {
         for (int i = 0; i < emptyTagNameStr.length; i++) {
@@ -73,12 +74,10 @@ public class HtmlNodeParser {
      * 1线程时，比jsoup快8倍  6线程比jsoup快4倍
      */
     public Node parse(byte[] htmlBytes, int[] constructIndex) {
-        nodesPosition = 0;
         Node root = new Node();
         root.rawHtml = htmlBytes;
         root.name = "#root".getBytes(StandardCharsets.UTF_8);
         root.nameHash = tagNameByteToLong(root.name);
-        nodes[nodesPosition++] = root;
         //默认最大栈不会大于256 , 大于的话再说吧
         Node[] stack = new Node[512];
         stack[0] = root;
@@ -169,9 +168,9 @@ public class HtmlNodeParser {
 
         }
 
-        if(stackTop==1){
+        if (stackTop == 1) {
             Node top = stack[stackTop];
-            root.size = top.siblingIndex+1;
+            root.size = top.siblingIndex + 1;
 
         }
 
@@ -180,7 +179,6 @@ public class HtmlNodeParser {
 
 
     public int addNode(Node[] stack, int stackTop, Node node, boolean close) {
-        nodes[nodesPosition++] = node;
         //如果添加的是一个闭合标签，直接放入放入栈顶元素的子节点中
         if (close) {
             stack[++stackTop] = node;
@@ -252,29 +250,62 @@ public class HtmlNodeParser {
 
                 stack[++stackTop] = brNode;
                 stackTop = closeStackTopNode(stack, stackTop, brNode);
-                nodes[nodesPosition++] = brNode;
             }
             return stackTop;
         }
 
 
-        Node node = stack[stackTop];
-
-        if (node.close) { //栈顶是闭合的，说明是一个又子元素的标签，
+        Node first = stack[stackTop];
+        Node node = first;
+        if (first.close) { //栈顶是闭合的，说明是一个有子元素的标签，
             Node t = stack[--stackTop];
-            t.size = node.siblingIndex + 1;
+            t.size = first.siblingIndex + 1;
             node = t;
         }
         boolean nameEq = (node.nameHash == nameHash);
 
+
         if (nameEq) {
+            stackTop = closeStackTopNode(stack, stackTop, node);
             node.closeStartIndex = closeStartIndex;
             node.closeEndIndex = closeEndIndex;
-            stackTop = closeStackTopNode(stack, stackTop, node);
         } else {
-            System.out.println("标签不配对，补充闭合标签");
-            stackTop = closeStackTopNode(stack, stackTop, node);
-            stackTop = closeTag(stack, stackTop, nameHash, nameLen, closeStartIndex, closeEndIndex);
+            //todo 自动补全还有很多问题，待修复
+
+            /**
+             * 先把当前node节点做闭合处理，然后从上往下遍历stack，查看是否有和nameHash一样的节点
+             *
+             * */
+
+            System.out.println("标签不配对,尝试补全," + node + "  -->  " + new String(node.rawHtml, node.openStartIndex, node.openEndIndex - node.openStartIndex + 1));
+            int i = stackTop - 1;
+
+            while (i > 0) {
+                Node node1 = stack[i];
+                if (node1.nameHash == nameHash) {
+                    //将栈中从stackTop到i的标签都闭合了
+
+                    //自动补全闭合标签
+                    for (int j = stackTop; j > i; j--) {
+                        Node node2 = stack[j];
+                        //todo  自动补全闭合的情况下，如何设置closeStartIndex和closeEndIndex？？？
+                        // closeStartIndex
+                        //       closeEndIndex
+                        stackTop = closeTag(stack, stackTop, node2.nameHash, node2.name.length, closeStartIndex-1, closeStartIndex-1);
+                    }
+
+                    //闭合nameHash对应的标签
+                    stackTop = closeTag(stack, stackTop, node1.nameHash, node1.name.length, closeStartIndex, closeEndIndex);
+                    break;
+                }
+                i--;
+            }
+
+            if (i == 0 && first.close) {  //没找到开始标签，没有自动补全，还原栈顶
+                Node t = stack[++stackTop];
+                t.size--;
+            }
+
         }
         return stackTop;
     }
@@ -383,7 +414,6 @@ public class HtmlNodeParser {
 
         while (!findEnd) {
 
-
             index = constructIndex[constructPosition++];
             //  c = htmlBytes[index];
             long attributeStart = ObjectAddress.getArrayData(arrAddress, index);
@@ -475,7 +505,6 @@ public class HtmlNodeParser {
                     int valueLength = attrValueEnd - attrValueStart + 1;
                     byte[] v = new byte[valueLength];
                     System.arraycopy(htmlBytes, attrValueStart, v, 0, valueLength);
-
                     if (KeyLength == 2) {
                         node.id = v;
                     } else if (KeyLength == 4) {
@@ -483,13 +512,9 @@ public class HtmlNodeParser {
                         node.hrefEnd = attrValueEnd;
                     } else {
                         node.allClass = v;
-
                     }
                 }
-
-
             } else {
-
                 break;
             }
 

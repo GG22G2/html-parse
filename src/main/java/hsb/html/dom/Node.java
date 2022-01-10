@@ -231,12 +231,17 @@ public class Node {
 
 
     public String attr(String key) {
+        if (key.equals("href")) {
+            if (hrefStart > 0 && hrefEnd > hrefStart) {
+                return new String(rawHtml, hrefStart, hrefEnd - hrefStart + 1);
+            }
+        }else {
+            byte[] bytes = key.getBytes(StandardCharsets.UTF_8);
 
-        byte[] bytes = key.getBytes(StandardCharsets.UTF_8);
+            //获取当前标签的位置，从中解析属性
+            for (int i = openStartIndex + name.length + 1; i < openEndIndex; i++) {
 
-        //
-        for (int i = openStartIndex + name.length + 1; i < openEndIndex; i++) {
-
+            }
 
         }
 
